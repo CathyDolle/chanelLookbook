@@ -10,9 +10,12 @@ export function Lookbook() {
   const spanSteps = useMemo(() => [3, 4, 6, 12] as const, []);
 
   const [stepIdx, setStepIdx] = useState<number>(0);
+  const [gridKey, setGridKey] = useState<number>(0);
+  const [isReloading, setIsReloading] = useState<boolean>(false);
+  const reloadTimer = useRef<number | null>(null);
+  const stepIdxRef = useRef<number>(0);
 
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const prevRects = useRef<Map<number, DOMRect> | null>(null);
   const lastDesktopGestureAt = useRef<number>(0);
   const pendingScrollY = useRef<number | null>(null);
   const scrollLockUntil = useRef<number>(0);
@@ -35,75 +38,26 @@ export function Lookbook() {
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
 
-  const captureRects = () => {
-    const map = new Map<number, DOMRect>();
-    cardRefs.current.forEach((el, i) => {
-      if (!el) return;
-      map.set(i, el.getBoundingClientRect());
-    });
-    prevRects.current = map;
-  };
-
-  const animateFromRects = (first: Map<number, DOMRect>) => {
-    if (isReducedMotion()) return;
-
-    cardRefs.current.forEach((el, i) => {
-      if (!el) return;
-      const firstRect = first.get(i);
-      if (!firstRect) return;
-
-      const lastRect = el.getBoundingClientRect();
-      const dx = firstRect.left - lastRect.left;
-      const dy = firstRect.top - lastRect.top;
-      const sx = firstRect.width / lastRect.width;
-      const sy = firstRect.height / lastRect.height;
-
-      if (
-        !Number.isFinite(dx) ||
-        !Number.isFinite(dy) ||
-        !Number.isFinite(sx) ||
-        !Number.isFinite(sy)
-      ) {
-        return;
-      }
-
-      // Plus "luxe": timing plus long, easing plus doux, micro-stagger seulement.
-      const delay = Math.min(i * 4, 60);
-
-      el.animate(
-        [
-          {
-            transformOrigin: "center",
-            transform: `translate3d(${dx}px, ${dy}px, 0) scale3d(${sx}, ${sy}, 1)`,
-            opacity: 0.98,
-          },
-          {
-            transformOrigin: "center",
-            transform: "none",
-            opacity: 1,
-          },
-        ],
-        {
-          duration: 820,
-          delay,
-          easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-          fill: "both",
-        },
-      );
-    });
-  };
-
   const shouldLockScrollY = () =>
     isPinching.current || Date.now() < scrollLockUntil.current;
 
   const requestZoom = (delta: 1 | -1) => {
-    captureRects();
+    const next = clampStep(stepIdxRef.current + delta);
+    // Si on est déjà au min/max, on ne retrigger rien.
+    if (next === stepIdxRef.current) return;
+
     if (typeof window !== "undefined" && shouldLockScrollY()) {
       pendingScrollY.current = window.scrollY;
-    } else {
-      pendingScrollY.current = null;
-    }
-    setStepIdx((i) => clampStep(i + delta));
+    } else pendingScrollY.current = null;
+
+    setIsReloading(true);
+    setStepIdx(next);
+    setGridKey((k) => k + 1);
+
+    if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
+    reloadTimer.current = window.setTimeout(() => {
+      setIsReloading(false);
+    }, 260);
   };
 
   const zoomInAll = () => requestZoom(1);
@@ -160,10 +114,6 @@ export function Lookbook() {
   }, []);
 
   useLayoutEffect(() => {
-    const first = prevRects.current;
-    if (!first) return;
-    prevRects.current = null;
-
     const y = pendingScrollY.current;
     if (typeof y === "number") {
       pendingScrollY.current = null;
@@ -172,39 +122,21 @@ export function Lookbook() {
         window.scrollTo({ top: y });
       }
     }
+  }, [stepIdx]);
 
-    animateFromRects(first);
+  useEffect(() => {
+    stepIdxRef.current = stepIdx;
   }, [stepIdx]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (isReducedMotion()) return;
+    // Plus d'animations sur resize.
+    return;
+  }, []);
 
-    let resizeEndTimer: number | null = null;
-    let hasCapturedForResize = false;
-
-    const onResize = () => {
-      // Capture une seule fois au début d'une rafale de resize,
-      // puis anime quand ça se stabilise.
-      if (!hasCapturedForResize) {
-        captureRects();
-        hasCapturedForResize = true;
-      }
-
-      if (resizeEndTimer) window.clearTimeout(resizeEndTimer);
-      resizeEndTimer = window.setTimeout(() => {
-        const first = prevRects.current;
-        prevRects.current = null;
-        hasCapturedForResize = false;
-        if (!first) return;
-        requestAnimationFrame(() => animateFromRects(first));
-      }, 140);
-    };
-
-    window.addEventListener("resize", onResize, { passive: true });
+  useEffect(() => {
     return () => {
-      window.removeEventListener("resize", onResize);
-      if (resizeEndTimer) window.clearTimeout(resizeEndTimer);
+      if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
     };
   }, []);
 
@@ -220,7 +152,17 @@ export function Lookbook() {
   return (
     <section className="w-full">
       <Container>
-        <div className="flex flex-wrap gutter-gap-1" style={{ overflowAnchor: "none" }}>
+        <div
+          key={gridKey}
+          className="flex flex-wrap gutter-gap-1"
+          style={{
+            overflowAnchor: "none",
+            opacity: isReloading ? 0.55 : 1,
+            transition: isReducedMotion()
+              ? undefined
+              : "opacity 260ms cubic-bezier(0.2, 0.9, 0.2, 1)",
+          }}
+        >
           {lookbook.map((item, idx) => (
             <div
               key={`${item.title}-${idx}`}
