@@ -17,10 +17,10 @@ export function Lookbook() {
 
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
   const lastDesktopGestureAt = useRef<number>(0);
-  const pendingScrollY = useRef<number | null>(null);
-  const scrollLockUntil = useRef<number>(0);
-  const isPinching = useRef<boolean>(false);
-  const prevBodyTouchAction = useRef<string | null>(null);
+  const pendingFocus = useRef<{
+    idx: number;
+    clientY: number;
+  } | null>(null);
 
   const pinch = useRef<{
     startDist: number;
@@ -38,17 +38,29 @@ export function Lookbook() {
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
 
-  const shouldLockScrollY = () =>
-    isPinching.current || Date.now() < scrollLockUntil.current;
+  const findCardIndexAtPoint = (clientX: number, clientY: number) => {
+    if (typeof document === "undefined") return null;
+    const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+    if (!el) return null;
+    const card = el.closest?.("[data-lookbook-idx]") as HTMLElement | null;
+    if (!card) return null;
+    const raw = card.getAttribute("data-lookbook-idx");
+    const idx = raw ? Number(raw) : NaN;
+    return Number.isFinite(idx) ? idx : null;
+  };
 
-  const requestZoom = (delta: 1 | -1) => {
+  const setFocusFromPoint = (clientX: number, clientY: number) => {
+    const idx = findCardIndexAtPoint(clientX, clientY);
+    if (idx === null) return;
+    pendingFocus.current = { idx, clientY };
+  };
+
+  const requestZoom = (delta: 1 | -1, focusPoint?: { clientX: number; clientY: number }) => {
     const next = clampStep(stepIdxRef.current + delta);
     // Si on est déjà au min/max, on ne retrigger rien.
     if (next === stepIdxRef.current) return;
 
-    if (typeof window !== "undefined" && shouldLockScrollY()) {
-      pendingScrollY.current = window.scrollY;
-    } else pendingScrollY.current = null;
+    if (focusPoint) setFocusFromPoint(focusPoint.clientX, focusPoint.clientY);
 
     setIsReloading(true);
     setStepIdx(next);
@@ -60,8 +72,8 @@ export function Lookbook() {
     }, 260);
   };
 
-  const zoomInAll = () => requestZoom(1);
-  const zoomOutAll = () => requestZoom(-1);
+  const zoomInAll = (focusPoint?: { clientX: number; clientY: number }) => requestZoom(1, focusPoint);
+  const zoomOutAll = (focusPoint?: { clientX: number; clientY: number }) => requestZoom(-1, focusPoint);
 
   useEffect(() => {
     // Bloque le zoom navigateur (Ctrl/Cmd +/-/0 et Ctrl/Cmd+wheel/pinch trackpad)
@@ -86,11 +98,10 @@ export function Lookbook() {
       const now = Date.now();
       if (now - lastDesktopGestureAt.current < 140) return;
       lastDesktopGestureAt.current = now;
-      // Pendant un pinch trackpad, on verrouille temporairement le scroll Y.
-      scrollLockUntil.current = now + 320;
 
-      if (e.deltaY < 0) zoomInAll();
-      else if (e.deltaY > 0) zoomOutAll();
+      const focusPoint = { clientX: e.clientX, clientY: e.clientY };
+      if (e.deltaY < 0) zoomInAll(focusPoint);
+      else if (e.deltaY > 0) zoomOutAll(focusPoint);
     };
 
     const onGesture = (e: Event) => {
@@ -114,14 +125,16 @@ export function Lookbook() {
   }, []);
 
   useLayoutEffect(() => {
-    const y = pendingScrollY.current;
-    if (typeof y === "number") {
-      pendingScrollY.current = null;
-      // Restaure uniquement pendant le pinch/zoom gesture (sinon on laisse scroller normalement).
-      if (shouldLockScrollY() && Math.abs(window.scrollY - y) > 1) {
-        window.scrollTo({ top: y });
-      }
-    }
+    // Re-centre le zoom/dézoom sur la carte "sous les doigts / le curseur".
+    const focus = pendingFocus.current;
+    if (!focus) return;
+    pendingFocus.current = null;
+
+    const el = cardRefs.current[focus.idx];
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const deltaY = rect.top - focus.clientY;
+    if (Math.abs(deltaY) > 1) window.scrollTo({ top: window.scrollY + deltaY });
   }, [stepIdx]);
 
   useEffect(() => {
@@ -169,6 +182,7 @@ export function Lookbook() {
               ref={(el) => {
                 cardRefs.current[idx] = el;
               }}
+              data-lookbook-idx={idx}
               className={clsx(
                 stepIdx === 0 && "span-w-3",
                 stepIdx === 1 && "span-w-4",
@@ -179,13 +193,9 @@ export function Lookbook() {
               )}
               onTouchStart={(e) => {
                 if (e.touches.length !== 2) return;
-                isPinching.current = true;
-                scrollLockUntil.current = Date.now() + 600;
-                if (prevBodyTouchAction.current === null) {
-                  prevBodyTouchAction.current = document.body.style.touchAction || "";
-                }
-                // Bloque le pan/scroll pendant le pinch, puis on restaure à la fin.
-                document.body.style.touchAction = "none";
+                const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                setFocusFromPoint(midX, midY);
                 pinch.current.startDist = getTouchDist(e.touches[0], e.touches[1]);
                 pinch.current.lastActionAt = Date.now();
               }}
@@ -201,32 +211,24 @@ export function Lookbook() {
 
                 const ratio = dist / pinch.current.startDist;
                 if (ratio > PINCH_OUT_THRESHOLD) {
-                  zoomInAll();
+                  const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                  const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                  zoomInAll({ clientX: midX, clientY: midY });
                   pinch.current.startDist = dist;
                   pinch.current.lastActionAt = now;
                 } else if (ratio < PINCH_IN_THRESHOLD) {
-                  zoomOutAll();
+                  const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                  const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                  zoomOutAll({ clientX: midX, clientY: midY });
                   pinch.current.startDist = dist;
                   pinch.current.lastActionAt = now;
                 }
               }}
               onTouchEnd={() => {
                 pinch.current.startDist = 0;
-                isPinching.current = false;
-                scrollLockUntil.current = Date.now() + 120;
-                if (prevBodyTouchAction.current !== null) {
-                  document.body.style.touchAction = prevBodyTouchAction.current;
-                  prevBodyTouchAction.current = null;
-                }
               }}
               onTouchCancel={() => {
                 pinch.current.startDist = 0;
-                isPinching.current = false;
-                scrollLockUntil.current = Date.now() + 120;
-                if (prevBodyTouchAction.current !== null) {
-                  document.body.style.touchAction = prevBodyTouchAction.current;
-                  prevBodyTouchAction.current = null;
-                }
               }}
             >
               <LookbookCard
