@@ -10,8 +10,9 @@ export function Lookbook() {
   const spanSteps = useMemo(() => [3, 4, 6, 12] as const, []);
   const gutterSteps = useMemo(() => ["xs", "s", "m", "l"] as const, []);
 
-  const [stepIdx, setStepIdx] = useState<number>(0);
-  const stepIdxRef = useRef<number>(0);
+  // Vue par défaut: 2 items par ligne (équivalent "w/2")
+  const [stepIdx, setStepIdx] = useState<number>(2);
+  const stepIdxRef = useRef<number>(2);
 
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
