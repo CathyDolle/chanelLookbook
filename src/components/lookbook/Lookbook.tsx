@@ -10,18 +10,11 @@ export function Lookbook() {
   const spanSteps = useMemo(() => [3, 4, 6, 12] as const, []);
 
   const [stepIdx, setStepIdx] = useState<number>(0);
-  const [pinchScale, setPinchScale] = useState<number>(1);
-  const [pinchOrigin, setPinchOrigin] = useState<{ x: number; y: number } | null>(null);
   const stepIdxRef = useRef<number>(0);
-  const pinchScaleRef = useRef<number>(1);
-  const isPinchingLiveRef = useRef<boolean>(false);
-  const [isSettling, setIsSettling] = useState<boolean>(false);
 
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const lastDesktopGestureAt = useRef<number>(0);
-  const desktopPinchEndTimer = useRef<number | null>(null);
-  const desktopPinchActive = useRef<boolean>(false);
   const pendingFocus = useRef<{
     idx: number;
     clientY: number;
@@ -38,8 +31,6 @@ export function Lookbook() {
   const PINCH_COOLDOWN_MS = 90;
   const PINCH_IN_THRESHOLD = 0.95; // plus sensible (zoom out)
   const PINCH_OUT_THRESHOLD = 1.05; // plus sensible (zoom in)
-  const PINCH_LIVE_MIN = 0.9;
-  const PINCH_LIVE_MAX = 1.12;
 
   const clampStep = (idx: number) =>
     Math.max(0, Math.min(spanSteps.length - 1, idx));
@@ -98,27 +89,12 @@ export function Lookbook() {
       e.preventDefault();
 
       const now = Date.now();
+      if (now - lastDesktopGestureAt.current < 140) return;
       lastDesktopGestureAt.current = now;
 
-      // Desktop "Photos iOS": zoom temps réel pendant le pinch trackpad,
-      // puis snap vers le step le plus proche quand le geste se termine.
-      if (!desktopPinchActive.current) {
-        beginLivePinchAt(e.clientX, e.clientY);
-        updateLivePinchScale(1);
-      }
-
-      // Map deltaY -> scale (continu, naturel).
-      // deltaY>0 = zoom out ; deltaY<0 = zoom in (mac trackpad).
-      const k = 0.0022;
-      const next = pinchScaleRef.current * Math.exp(-e.deltaY * k);
-      updateLivePinchScale(next);
-
-      setFocusFromPoint(e.clientX, e.clientY);
-
-      if (desktopPinchEndTimer.current) window.clearTimeout(desktopPinchEndTimer.current);
-      desktopPinchEndTimer.current = window.setTimeout(() => {
-        endLivePinchAt(e.clientX, e.clientY);
-      }, 140);
+      const focusPoint = { clientX: e.clientX, clientY: e.clientY };
+      if (e.deltaY < 0) zoomInAll(focusPoint);
+      else if (e.deltaY > 0) zoomOutAll(focusPoint);
     };
 
     const onGesture = (e: Event) => {
@@ -138,7 +114,6 @@ export function Lookbook() {
       window.removeEventListener("gesturestart", onGesture as EventListener);
       window.removeEventListener("gesturechange", onGesture as EventListener);
       window.removeEventListener("gestureend", onGesture as EventListener);
-      if (desktopPinchEndTimer.current) window.clearTimeout(desktopPinchEndTimer.current);
     };
   }, []);
 
@@ -165,54 +140,6 @@ export function Lookbook() {
     return;
   }, []);
 
-  const nearestStepFromScale = (current: number, scale: number) => {
-    // Échelle live (transform) -> choix discret sur 4 steps
-    // On utilise des seuils symétriques proches d'iOS: petit geste => pas de changement,
-    // geste clair => step suivant/précédent. On pourrait l'étendre à multi-steps plus tard.
-    if (scale > 1.06) return clampStep(current + 1);
-    if (scale < 0.94) return clampStep(current - 1);
-    return clampStep(current);
-  };
-
-  const beginLivePinchAt = (clientX: number, clientY: number) => {
-    const gridEl = gridRef.current;
-    if (gridEl) {
-      const r = gridEl.getBoundingClientRect();
-      pinch.current.originX = clientX - r.left;
-      pinch.current.originY = clientY - r.top;
-      setPinchOrigin({ x: pinch.current.originX, y: pinch.current.originY });
-    } else {
-      pinch.current.originX = 0;
-      pinch.current.originY = 0;
-      setPinchOrigin(null);
-    }
-
-    isPinchingLiveRef.current = true;
-    desktopPinchActive.current = true;
-    setIsSettling(false);
-  };
-
-  const updateLivePinchScale = (scale: number) => {
-    const nextScale = Math.max(PINCH_LIVE_MIN, Math.min(PINCH_LIVE_MAX, scale));
-    setPinchScale(nextScale);
-    pinchScaleRef.current = nextScale;
-  };
-
-  const endLivePinchAt = (clientX: number, clientY: number) => {
-    const finalScale = pinchScaleRef.current;
-    isPinchingLiveRef.current = false;
-    desktopPinchActive.current = false;
-    setIsSettling(true);
-
-    const targetStep = nearestStepFromScale(stepIdxRef.current, finalScale);
-    requestZoomTo(targetStep, { clientX, clientY });
-
-    setPinchScale(1);
-    pinchScaleRef.current = 1;
-    window.setTimeout(() => setPinchOrigin(null), 240);
-    window.setTimeout(() => setIsSettling(false), 280);
-  };
-
   const getTouchDist = (
     t1: { clientX: number; clientY: number },
     t2: { clientX: number; clientY: number },
@@ -231,18 +158,6 @@ export function Lookbook() {
           style={{
             overflowAnchor: "none",
             backgroundColor: "#fff",
-            willChange: pinchScale !== 1 ? "transform" : undefined,
-            transform:
-              pinchScale !== 1
-                ? `translateZ(0) scale(${pinchScale})`
-                : undefined,
-            transformOrigin:
-              pinchOrigin ? `${pinchOrigin.x}px ${pinchOrigin.y}px` : undefined,
-            transition: isReducedMotion()
-              ? undefined
-              : isPinchingLiveRef.current
-                ? "none"
-                : "transform 260ms cubic-bezier(0.2, 0.9, 0.2, 1)",
           }}
         >
           {lookbook.map((item, idx) => (
@@ -262,83 +177,43 @@ export function Lookbook() {
               )}
               onTouchStart={(e) => {
                 if (e.touches.length !== 2) return;
-                isPinchingLiveRef.current = true;
-                setIsSettling(false);
                 const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-
-                // Live pinch (style iOS Photos): scale temps réel, puis snap au relâchement.
-                const gridEl = gridRef.current;
-                if (gridEl) {
-                  const r = gridEl.getBoundingClientRect();
-                  pinch.current.originX = midX - r.left;
-                  pinch.current.originY = midY - r.top;
-                  setPinchOrigin({ x: pinch.current.originX, y: pinch.current.originY });
-                } else {
-                  pinch.current.originX = 0;
-                  pinch.current.originY = 0;
-                  setPinchOrigin(null);
-                }
 
                 setFocusFromPoint(midX, midY);
                 pinch.current.startDist = getTouchDist(e.touches[0], e.touches[1]);
                 pinch.current.lastActionAt = Date.now();
-                pinch.current.startScale = 1;
-                setPinchScale(1);
-                pinchScaleRef.current = 1;
               }}
               onTouchMove={(e) => {
                 if (e.touches.length !== 2) return;
                 e.preventDefault();
 
                 const now = Date.now();
+                if (now - pinch.current.lastActionAt < PINCH_COOLDOWN_MS) return;
+
                 const dist = getTouchDist(e.touches[0], e.touches[1]);
                 if (!pinch.current.startDist) return;
 
                 const ratio = dist / pinch.current.startDist;
+                const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                const focusPoint = { clientX: midX, clientY: midY };
 
-                // Live scale (continu)
-                const nextScale = Math.max(PINCH_LIVE_MIN, Math.min(PINCH_LIVE_MAX, ratio));
-                setPinchScale(nextScale);
-                pinchScaleRef.current = nextScale;
-
-                // On ne change de "step" qu'au relâchement.
-                if (now - pinch.current.lastActionAt >= PINCH_COOLDOWN_MS) {
+                if (ratio > PINCH_OUT_THRESHOLD) {
+                  zoomInAll(focusPoint);
+                  pinch.current.startDist = dist;
+                  pinch.current.lastActionAt = now;
+                } else if (ratio < PINCH_IN_THRESHOLD) {
+                  zoomOutAll(focusPoint);
+                  pinch.current.startDist = dist;
                   pinch.current.lastActionAt = now;
                 }
               }}
               onTouchEnd={() => {
-                const finalScale = pinchScaleRef.current;
-                const midX = pinch.current.originX;
-                const midY = pinch.current.originY;
-
-                isPinchingLiveRef.current = false;
-                setIsSettling(true);
-
-                const gridEl = gridRef.current;
-                const r = gridEl?.getBoundingClientRect();
-                const clientX = r ? r.left + midX : window.innerWidth / 2;
-                const clientY = r ? r.top + midY : window.innerHeight / 2;
-
-                // Choisit la taille la plus proche, puis settle (comme iOS Photos).
-                const targetStep = nearestStepFromScale(stepIdxRef.current, finalScale);
-                requestZoomTo(targetStep, { clientX, clientY });
-
-                setPinchScale(1);
-                pinchScaleRef.current = 1;
-                // On garde l'origine un court instant pour que le reset soit "propre".
-                window.setTimeout(() => setPinchOrigin(null), 240);
-                window.setTimeout(() => setIsSettling(false), 280);
-
                 pinch.current.startDist = 0;
               }}
               onTouchCancel={() => {
                 pinch.current.startDist = 0;
-                isPinchingLiveRef.current = false;
-                setIsSettling(false);
-                setPinchScale(1);
-                pinchScaleRef.current = 1;
-                setPinchOrigin(null);
               }}
             >
               <LookbookCard

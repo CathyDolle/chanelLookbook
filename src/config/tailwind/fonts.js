@@ -5,7 +5,7 @@ const fontFamily = {
 }
 
 /** Config variables */
-const MIN_SIZE = 10
+const MIN_SIZE = 8
 const MAX_SIZE = 128
 
 const largeSpecificSizing = [206, 160, 150, 134]
