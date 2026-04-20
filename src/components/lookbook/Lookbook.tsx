@@ -20,6 +20,8 @@ export function Lookbook() {
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const lastDesktopGestureAt = useRef<number>(0);
+  const desktopPinchEndTimer = useRef<number | null>(null);
+  const desktopPinchActive = useRef<boolean>(false);
   const pendingFocus = useRef<{
     idx: number;
     clientY: number;
@@ -96,12 +98,27 @@ export function Lookbook() {
       e.preventDefault();
 
       const now = Date.now();
-      if (now - lastDesktopGestureAt.current < 140) return;
       lastDesktopGestureAt.current = now;
 
-      const focusPoint = { clientX: e.clientX, clientY: e.clientY };
-      if (e.deltaY < 0) zoomInAll(focusPoint);
-      else if (e.deltaY > 0) zoomOutAll(focusPoint);
+      // Desktop "Photos iOS": zoom temps réel pendant le pinch trackpad,
+      // puis snap vers le step le plus proche quand le geste se termine.
+      if (!desktopPinchActive.current) {
+        beginLivePinchAt(e.clientX, e.clientY);
+        updateLivePinchScale(1);
+      }
+
+      // Map deltaY -> scale (continu, naturel).
+      // deltaY>0 = zoom out ; deltaY<0 = zoom in (mac trackpad).
+      const k = 0.0022;
+      const next = pinchScaleRef.current * Math.exp(-e.deltaY * k);
+      updateLivePinchScale(next);
+
+      setFocusFromPoint(e.clientX, e.clientY);
+
+      if (desktopPinchEndTimer.current) window.clearTimeout(desktopPinchEndTimer.current);
+      desktopPinchEndTimer.current = window.setTimeout(() => {
+        endLivePinchAt(e.clientX, e.clientY);
+      }, 140);
     };
 
     const onGesture = (e: Event) => {
@@ -121,6 +138,7 @@ export function Lookbook() {
       window.removeEventListener("gesturestart", onGesture as EventListener);
       window.removeEventListener("gesturechange", onGesture as EventListener);
       window.removeEventListener("gestureend", onGesture as EventListener);
+      if (desktopPinchEndTimer.current) window.clearTimeout(desktopPinchEndTimer.current);
     };
   }, []);
 
@@ -154,6 +172,45 @@ export function Lookbook() {
     if (scale > 1.06) return clampStep(current + 1);
     if (scale < 0.94) return clampStep(current - 1);
     return clampStep(current);
+  };
+
+  const beginLivePinchAt = (clientX: number, clientY: number) => {
+    const gridEl = gridRef.current;
+    if (gridEl) {
+      const r = gridEl.getBoundingClientRect();
+      pinch.current.originX = clientX - r.left;
+      pinch.current.originY = clientY - r.top;
+      setPinchOrigin({ x: pinch.current.originX, y: pinch.current.originY });
+    } else {
+      pinch.current.originX = 0;
+      pinch.current.originY = 0;
+      setPinchOrigin(null);
+    }
+
+    isPinchingLiveRef.current = true;
+    desktopPinchActive.current = true;
+    setIsSettling(false);
+  };
+
+  const updateLivePinchScale = (scale: number) => {
+    const nextScale = Math.max(PINCH_LIVE_MIN, Math.min(PINCH_LIVE_MAX, scale));
+    setPinchScale(nextScale);
+    pinchScaleRef.current = nextScale;
+  };
+
+  const endLivePinchAt = (clientX: number, clientY: number) => {
+    const finalScale = pinchScaleRef.current;
+    isPinchingLiveRef.current = false;
+    desktopPinchActive.current = false;
+    setIsSettling(true);
+
+    const targetStep = nearestStepFromScale(stepIdxRef.current, finalScale);
+    requestZoomTo(targetStep, { clientX, clientY });
+
+    setPinchScale(1);
+    pinchScaleRef.current = 1;
+    window.setTimeout(() => setPinchOrigin(null), 240);
+    window.setTimeout(() => setIsSettling(false), 280);
   };
 
   const getTouchDist = (
