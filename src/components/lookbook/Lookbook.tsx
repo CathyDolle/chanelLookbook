@@ -20,6 +20,10 @@ export function Lookbook() {
     lastActionAt: number;
   }>({ startDist: 0, lastActionAt: 0 });
 
+  const PINCH_COOLDOWN_MS = 90;
+  const PINCH_IN_THRESHOLD = 0.95; // plus sensible (zoom out)
+  const PINCH_OUT_THRESHOLD = 1.05; // plus sensible (zoom in)
+
   const clampStep = (idx: number) =>
     Math.max(0, Math.min(spanSteps.length - 1, idx));
 
@@ -161,7 +165,8 @@ export function Lookbook() {
                 stepIdx === 1 && "span-w-4",
                 stepIdx === 2 && "span-w-6",
                 stepIdx === 3 && "span-w-12",
-                "touch-none select-none",
+                // Laisse le scroll vertical sur mobile.
+                "touch-pan-y select-none",
               )}
               onTouchStart={(e) => {
                 if (e.touches.length !== 2) return;
@@ -173,17 +178,17 @@ export function Lookbook() {
                 e.preventDefault();
 
                 const now = Date.now();
-                if (now - pinch.current.lastActionAt < 160) return;
+                if (now - pinch.current.lastActionAt < PINCH_COOLDOWN_MS) return;
 
                 const dist = getTouchDist(e.touches[0], e.touches[1]);
                 if (!pinch.current.startDist) return;
 
                 const ratio = dist / pinch.current.startDist;
-                if (ratio > 1.12) {
+                if (ratio > PINCH_OUT_THRESHOLD) {
                   zoomInAll();
                   pinch.current.startDist = dist;
                   pinch.current.lastActionAt = now;
-                } else if (ratio < 0.88) {
+                } else if (ratio < PINCH_IN_THRESHOLD) {
                   zoomOutAll();
                   pinch.current.startDist = dist;
                   pinch.current.lastActionAt = now;
