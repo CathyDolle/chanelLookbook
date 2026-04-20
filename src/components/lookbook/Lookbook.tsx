@@ -14,6 +14,10 @@ export function Lookbook() {
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
   const prevRects = useRef<Map<number, DOMRect> | null>(null);
   const lastDesktopGestureAt = useRef<number>(0);
+  const pendingScrollY = useRef<number | null>(null);
+  const scrollLockUntil = useRef<number>(0);
+  const isPinching = useRef<boolean>(false);
+  const prevBodyTouchAction = useRef<string | null>(null);
 
   const pinch = useRef<{
     startDist: number;
@@ -40,15 +44,70 @@ export function Lookbook() {
     prevRects.current = map;
   };
 
-  const zoomInAll = () => {
-    captureRects();
-    setStepIdx((i) => clampStep(i + 1));
+  const animateFromRects = (first: Map<number, DOMRect>) => {
+    if (isReducedMotion()) return;
+
+    cardRefs.current.forEach((el, i) => {
+      if (!el) return;
+      const firstRect = first.get(i);
+      if (!firstRect) return;
+
+      const lastRect = el.getBoundingClientRect();
+      const dx = firstRect.left - lastRect.left;
+      const dy = firstRect.top - lastRect.top;
+      const sx = firstRect.width / lastRect.width;
+      const sy = firstRect.height / lastRect.height;
+
+      if (
+        !Number.isFinite(dx) ||
+        !Number.isFinite(dy) ||
+        !Number.isFinite(sx) ||
+        !Number.isFinite(sy)
+      ) {
+        return;
+      }
+
+      // Plus "luxe": timing plus long, easing plus doux, micro-stagger seulement.
+      const delay = Math.min(i * 4, 60);
+
+      el.animate(
+        [
+          {
+            transformOrigin: "center",
+            transform: `translate3d(${dx}px, ${dy}px, 0) scale3d(${sx}, ${sy}, 1)`,
+            opacity: 0.98,
+          },
+          {
+            transformOrigin: "center",
+            transform: "none",
+            opacity: 1,
+          },
+        ],
+        {
+          duration: 820,
+          delay,
+          easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+          fill: "both",
+        },
+      );
+    });
   };
 
-  const zoomOutAll = () => {
+  const shouldLockScrollY = () =>
+    isPinching.current || Date.now() < scrollLockUntil.current;
+
+  const requestZoom = (delta: 1 | -1) => {
     captureRects();
-    setStepIdx((i) => clampStep(i - 1));
+    if (typeof window !== "undefined" && shouldLockScrollY()) {
+      pendingScrollY.current = window.scrollY;
+    } else {
+      pendingScrollY.current = null;
+    }
+    setStepIdx((i) => clampStep(i + delta));
   };
+
+  const zoomInAll = () => requestZoom(1);
+  const zoomOutAll = () => requestZoom(-1);
 
   useEffect(() => {
     // Bloque le zoom navigateur (Ctrl/Cmd +/-/0 et Ctrl/Cmd+wheel/pinch trackpad)
@@ -73,6 +132,8 @@ export function Lookbook() {
       const now = Date.now();
       if (now - lastDesktopGestureAt.current < 140) return;
       lastDesktopGestureAt.current = now;
+      // Pendant un pinch trackpad, on verrouille temporairement le scroll Y.
+      scrollLockUntil.current = now + 320;
 
       if (e.deltaY < 0) zoomInAll();
       else if (e.deltaY > 0) zoomOutAll();
@@ -103,47 +164,49 @@ export function Lookbook() {
     if (!first) return;
     prevRects.current = null;
 
+    const y = pendingScrollY.current;
+    if (typeof y === "number") {
+      pendingScrollY.current = null;
+      // Restaure uniquement pendant le pinch/zoom gesture (sinon on laisse scroller normalement).
+      if (shouldLockScrollY() && Math.abs(window.scrollY - y) > 1) {
+        window.scrollTo({ top: y });
+      }
+    }
+
+    animateFromRects(first);
+  }, [stepIdx]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     if (isReducedMotion()) return;
 
-    cardRefs.current.forEach((el, i) => {
-      if (!el) return;
-      const firstRect = first.get(i);
-      if (!firstRect) return;
+    let resizeEndTimer: number | null = null;
+    let hasCapturedForResize = false;
 
-      const lastRect = el.getBoundingClientRect();
-      const dx = firstRect.left - lastRect.left;
-      const dy = firstRect.top - lastRect.top;
-      const sx = firstRect.width / lastRect.width;
-      const sy = firstRect.height / lastRect.height;
-
-      if (
-        !Number.isFinite(dx) ||
-        !Number.isFinite(dy) ||
-        !Number.isFinite(sx) ||
-        !Number.isFinite(sy)
-      ) {
-        return;
+    const onResize = () => {
+      // Capture une seule fois au début d'une rafale de resize,
+      // puis anime quand ça se stabilise.
+      if (!hasCapturedForResize) {
+        captureRects();
+        hasCapturedForResize = true;
       }
 
-      const delay = Math.min(i * 8, 120);
+      if (resizeEndTimer) window.clearTimeout(resizeEndTimer);
+      resizeEndTimer = window.setTimeout(() => {
+        const first = prevRects.current;
+        prevRects.current = null;
+        hasCapturedForResize = false;
+        if (!first) return;
+        requestAnimationFrame(() => animateFromRects(first));
+      }, 140);
+    };
 
-      el.animate(
-        [
-          {
-            transformOrigin: "top left",
-            transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
-          },
-          { transformOrigin: "top left", transform: "none" },
-        ],
-        {
-          duration: 560,
-          delay,
-          easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-          fill: "both",
-        },
-      );
-    });
-  }, [stepIdx]);
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => {
+      window.removeEventListener("resize", onResize);
+      if (resizeEndTimer) window.clearTimeout(resizeEndTimer);
+    };
+  }, []);
 
   const getTouchDist = (
     t1: { clientX: number; clientY: number },
@@ -157,7 +220,7 @@ export function Lookbook() {
   return (
     <section className="w-full">
       <Container>
-        <div className="flex flex-wrap gutter-gap-1">
+        <div className="flex flex-wrap gutter-gap-1" style={{ overflowAnchor: "none" }}>
           {lookbook.map((item, idx) => (
             <div
               key={`${item.title}-${idx}`}
@@ -174,6 +237,13 @@ export function Lookbook() {
               )}
               onTouchStart={(e) => {
                 if (e.touches.length !== 2) return;
+                isPinching.current = true;
+                scrollLockUntil.current = Date.now() + 600;
+                if (prevBodyTouchAction.current === null) {
+                  prevBodyTouchAction.current = document.body.style.touchAction || "";
+                }
+                // Bloque le pan/scroll pendant le pinch, puis on restaure à la fin.
+                document.body.style.touchAction = "none";
                 pinch.current.startDist = getTouchDist(e.touches[0], e.touches[1]);
                 pinch.current.lastActionAt = Date.now();
               }}
@@ -200,6 +270,21 @@ export function Lookbook() {
               }}
               onTouchEnd={() => {
                 pinch.current.startDist = 0;
+                isPinching.current = false;
+                scrollLockUntil.current = Date.now() + 120;
+                if (prevBodyTouchAction.current !== null) {
+                  document.body.style.touchAction = prevBodyTouchAction.current;
+                  prevBodyTouchAction.current = null;
+                }
+              }}
+              onTouchCancel={() => {
+                pinch.current.startDist = 0;
+                isPinching.current = false;
+                scrollLockUntil.current = Date.now() + 120;
+                if (prevBodyTouchAction.current !== null) {
+                  document.body.style.touchAction = prevBodyTouchAction.current;
+                  prevBodyTouchAction.current = null;
+                }
               }}
             >
               <LookbookCard

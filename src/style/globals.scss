@@ -12,9 +12,11 @@
 	
 		--header-height-mobile: calc(var(--header) + var(--header-link));
 
-		// Bloque le scroll vertical globalement (Y)
-		overflow-y: hidden;
-		overscroll-behavior-y: none;
+		// Bloque uniquement le scroll horizontal (X), laisse le scroll vertical (Y).
+		overflow-x: hidden;
+		overflow-y: auto;
+		overscroll-behavior-x: none;
+		overscroll-behavior-y: auto;
 
 		@screen lg {
 			--nav: #{to-rem(54)};
@@ -63,14 +65,15 @@
 		-webkit-tap-highlight-color: transparent;
 	}
 	body {
-		overscroll-behavior: none;
+		overscroll-behavior-x: none;
+		overscroll-behavior-y: auto;
 		white-space: pre-wrap;
-		// Empêche les gestes de pan vertical sur mobile (réduit l'impression de "zoom/déplacement")
-		touch-action: pan-x;
+		// Autorise le scroll vertical sur mobile (1 doigt) et empêche le pan horizontal.
+		touch-action: pan-y;
 	}
 	body, html {
-		overscroll-behavior: contain;
-		overflow-y: hidden;
+		overflow-x: hidden;
+		overflow-y: auto;
 	}
 	p,h1,h2,h3,h4 {
 		text-wrap: balance;
