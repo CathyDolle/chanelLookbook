@@ -10,12 +10,15 @@ export function Lookbook() {
   const spanSteps = useMemo(() => [3, 4, 6, 12] as const, []);
 
   const [stepIdx, setStepIdx] = useState<number>(0);
-  const [gridKey, setGridKey] = useState<number>(0);
-  const [isReloading, setIsReloading] = useState<boolean>(false);
-  const reloadTimer = useRef<number | null>(null);
+  const [pinchScale, setPinchScale] = useState<number>(1);
+  const [pinchOrigin, setPinchOrigin] = useState<{ x: number; y: number } | null>(null);
   const stepIdxRef = useRef<number>(0);
+  const pinchScaleRef = useRef<number>(1);
+  const isPinchingLiveRef = useRef<boolean>(false);
+  const [isSettling, setIsSettling] = useState<boolean>(false);
 
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const gridRef = useRef<HTMLDivElement | null>(null);
   const lastDesktopGestureAt = useRef<number>(0);
   const pendingFocus = useRef<{
     idx: number;
@@ -25,11 +28,16 @@ export function Lookbook() {
   const pinch = useRef<{
     startDist: number;
     lastActionAt: number;
-  }>({ startDist: 0, lastActionAt: 0 });
+    startScale: number;
+    originX: number;
+    originY: number;
+  }>({ startDist: 0, lastActionAt: 0, startScale: 1, originX: 0, originY: 0 });
 
   const PINCH_COOLDOWN_MS = 90;
   const PINCH_IN_THRESHOLD = 0.95; // plus sensible (zoom out)
   const PINCH_OUT_THRESHOLD = 1.05; // plus sensible (zoom in)
+  const PINCH_LIVE_MIN = 0.9;
+  const PINCH_LIVE_MAX = 1.12;
 
   const clampStep = (idx: number) =>
     Math.max(0, Math.min(spanSteps.length - 1, idx));
@@ -55,25 +63,17 @@ export function Lookbook() {
     pendingFocus.current = { idx, clientY };
   };
 
-  const requestZoom = (delta: 1 | -1, focusPoint?: { clientX: number; clientY: number }) => {
-    const next = clampStep(stepIdxRef.current + delta);
-    // Si on est déjà au min/max, on ne retrigger rien.
-    if (next === stepIdxRef.current) return;
-
+  const requestZoomTo = (next: number, focusPoint?: { clientX: number; clientY: number }) => {
+    const clamped = clampStep(next);
+    if (clamped === stepIdxRef.current) return;
     if (focusPoint) setFocusFromPoint(focusPoint.clientX, focusPoint.clientY);
-
-    setIsReloading(true);
-    setStepIdx(next);
-    setGridKey((k) => k + 1);
-
-    if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
-    reloadTimer.current = window.setTimeout(() => {
-      setIsReloading(false);
-    }, 260);
+    setStepIdx(clamped);
   };
 
-  const zoomInAll = (focusPoint?: { clientX: number; clientY: number }) => requestZoom(1, focusPoint);
-  const zoomOutAll = (focusPoint?: { clientX: number; clientY: number }) => requestZoom(-1, focusPoint);
+  const zoomInAll = (focusPoint?: { clientX: number; clientY: number }) =>
+    requestZoomTo(stepIdxRef.current + 1, focusPoint);
+  const zoomOutAll = (focusPoint?: { clientX: number; clientY: number }) =>
+    requestZoomTo(stepIdxRef.current - 1, focusPoint);
 
   useEffect(() => {
     // Bloque le zoom navigateur (Ctrl/Cmd +/-/0 et Ctrl/Cmd+wheel/pinch trackpad)
@@ -147,11 +147,14 @@ export function Lookbook() {
     return;
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
-    };
-  }, []);
+  const nearestStepFromScale = (current: number, scale: number) => {
+    // Échelle live (transform) -> choix discret sur 4 steps
+    // On utilise des seuils symétriques proches d'iOS: petit geste => pas de changement,
+    // geste clair => step suivant/précédent. On pourrait l'étendre à multi-steps plus tard.
+    if (scale > 1.06) return clampStep(current + 1);
+    if (scale < 0.94) return clampStep(current - 1);
+    return clampStep(current);
+  };
 
   const getTouchDist = (
     t1: { clientX: number; clientY: number },
@@ -166,14 +169,23 @@ export function Lookbook() {
     <section className="w-full">
       <Container>
         <div
-          key={gridKey}
+          ref={gridRef}
           className="flex flex-wrap gutter-gap-1"
           style={{
             overflowAnchor: "none",
-            opacity: isReloading ? 0.55 : 1,
+            backgroundColor: "#fff",
+            willChange: pinchScale !== 1 ? "transform" : undefined,
+            transform:
+              pinchScale !== 1
+                ? `translateZ(0) scale(${pinchScale})`
+                : undefined,
+            transformOrigin:
+              pinchOrigin ? `${pinchOrigin.x}px ${pinchOrigin.y}px` : undefined,
             transition: isReducedMotion()
               ? undefined
-              : "opacity 260ms cubic-bezier(0.2, 0.9, 0.2, 1)",
+              : isPinchingLiveRef.current
+                ? "none"
+                : "transform 260ms cubic-bezier(0.2, 0.9, 0.2, 1)",
           }}
         >
           {lookbook.map((item, idx) => (
@@ -193,42 +205,83 @@ export function Lookbook() {
               )}
               onTouchStart={(e) => {
                 if (e.touches.length !== 2) return;
+                isPinchingLiveRef.current = true;
+                setIsSettling(false);
                 const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+                // Live pinch (style iOS Photos): scale temps réel, puis snap au relâchement.
+                const gridEl = gridRef.current;
+                if (gridEl) {
+                  const r = gridEl.getBoundingClientRect();
+                  pinch.current.originX = midX - r.left;
+                  pinch.current.originY = midY - r.top;
+                  setPinchOrigin({ x: pinch.current.originX, y: pinch.current.originY });
+                } else {
+                  pinch.current.originX = 0;
+                  pinch.current.originY = 0;
+                  setPinchOrigin(null);
+                }
+
                 setFocusFromPoint(midX, midY);
                 pinch.current.startDist = getTouchDist(e.touches[0], e.touches[1]);
                 pinch.current.lastActionAt = Date.now();
+                pinch.current.startScale = 1;
+                setPinchScale(1);
+                pinchScaleRef.current = 1;
               }}
               onTouchMove={(e) => {
                 if (e.touches.length !== 2) return;
                 e.preventDefault();
 
                 const now = Date.now();
-                if (now - pinch.current.lastActionAt < PINCH_COOLDOWN_MS) return;
-
                 const dist = getTouchDist(e.touches[0], e.touches[1]);
                 if (!pinch.current.startDist) return;
 
                 const ratio = dist / pinch.current.startDist;
-                if (ratio > PINCH_OUT_THRESHOLD) {
-                  const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                  const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-                  zoomInAll({ clientX: midX, clientY: midY });
-                  pinch.current.startDist = dist;
-                  pinch.current.lastActionAt = now;
-                } else if (ratio < PINCH_IN_THRESHOLD) {
-                  const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                  const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-                  zoomOutAll({ clientX: midX, clientY: midY });
-                  pinch.current.startDist = dist;
+
+                // Live scale (continu)
+                const nextScale = Math.max(PINCH_LIVE_MIN, Math.min(PINCH_LIVE_MAX, ratio));
+                setPinchScale(nextScale);
+                pinchScaleRef.current = nextScale;
+
+                // On ne change de "step" qu'au relâchement.
+                if (now - pinch.current.lastActionAt >= PINCH_COOLDOWN_MS) {
                   pinch.current.lastActionAt = now;
                 }
               }}
               onTouchEnd={() => {
+                const finalScale = pinchScaleRef.current;
+                const midX = pinch.current.originX;
+                const midY = pinch.current.originY;
+
+                isPinchingLiveRef.current = false;
+                setIsSettling(true);
+
+                const gridEl = gridRef.current;
+                const r = gridEl?.getBoundingClientRect();
+                const clientX = r ? r.left + midX : window.innerWidth / 2;
+                const clientY = r ? r.top + midY : window.innerHeight / 2;
+
+                // Choisit la taille la plus proche, puis settle (comme iOS Photos).
+                const targetStep = nearestStepFromScale(stepIdxRef.current, finalScale);
+                requestZoomTo(targetStep, { clientX, clientY });
+
+                setPinchScale(1);
+                pinchScaleRef.current = 1;
+                // On garde l'origine un court instant pour que le reset soit "propre".
+                window.setTimeout(() => setPinchOrigin(null), 240);
+                window.setTimeout(() => setIsSettling(false), 280);
+
                 pinch.current.startDist = 0;
               }}
               onTouchCancel={() => {
                 pinch.current.startDist = 0;
+                isPinchingLiveRef.current = false;
+                setIsSettling(false);
+                setPinchScale(1);
+                pinchScaleRef.current = 1;
+                setPinchOrigin(null);
               }}
             >
               <LookbookCard

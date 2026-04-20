@@ -1,8 +1,8 @@
 const grid = {
 	mobile: {
 		columns: 12,
-		gutter: 8,
-		margin: 8,
+		gutter: 5,
+		margin: 5,
 		mockupWidth: 375,
 		fontScalingMaxWidth: 475,
 	},
