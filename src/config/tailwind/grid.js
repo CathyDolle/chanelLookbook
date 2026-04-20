@@ -1,8 +1,8 @@
 const grid = {
 	mobile: {
-		columns: 6,
-		gutter: 12,
-		margin: 12,
+		columns: 12,
+		gutter: 8,
+		margin: 8,
 		mockupWidth: 375,
 		fontScalingMaxWidth: 475,
 	},
@@ -15,8 +15,8 @@ const grid = {
 	},
 	desktop: {
 		columns: 12,
-		gutter: 24,
-		margin: 24,
+		gutter: 8,
+		margin: 8,
 		mockupWidth: 1440,
 		// maxWidth: 1920,
 		fontScalingMaxWidth: 1680,

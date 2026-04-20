@@ -1,7 +1,7 @@
 /** Config variables */
 const fontFamily = {
 	sans: ['var(--font-inter)', 'sans-serif'],
-	serif: ['var(--font-rhapsody)', 'serif'],
+	serif: ['var(--font-chanel)', 'serif'],
 }
 
 /** Config variables */

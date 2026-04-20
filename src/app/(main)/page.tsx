@@ -1,13 +1,12 @@
-import Image from "next/image"
-import Cover from "@/assets/images/placeholder.jpg"
-import { Container } from "@/components"
+import { Container, Lookbook } from "@/components"
 
 export default function Home() {
 	return (
 		<main>
 			<Container>
-				<h1 className="font-serif">Starter next</h1>
+				<h1 className="font-serif mb-8">Chanel Lookbook</h1>
 			</Container>
+			<Lookbook />
 		</main>
 	)
 }
