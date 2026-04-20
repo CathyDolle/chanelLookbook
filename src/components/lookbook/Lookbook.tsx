@@ -8,6 +8,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 export function Lookbook() {
   const spanSteps = useMemo(() => [3, 4, 6, 12] as const, []);
+  const gutterSteps = useMemo(() => ["xs", "s", "m", "l"] as const, []);
 
   const [stepIdx, setStepIdx] = useState<number>(0);
   const stepIdxRef = useRef<number>(0);
@@ -135,6 +136,19 @@ export function Lookbook() {
   }, [stepIdx]);
 
   useEffect(() => {
+    // Rend la gouttière globale (toute la page), pas juste le composant.
+    const key = gutterSteps[stepIdx] ?? "m";
+    const root = document.documentElement;
+    root.classList.remove("gutter-gap-xs", "gutter-gap-s", "gutter-gap-m", "gutter-gap-l");
+    root.classList.add(`gutter-gap-${key}`);
+
+    return () => {
+      root.classList.remove("gutter-gap-xs", "gutter-gap-s", "gutter-gap-m", "gutter-gap-l");
+      root.classList.add("gutter-gap-m");
+    };
+  }, [stepIdx, gutterSteps]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     // Plus d'animations sur resize.
     return;
@@ -149,12 +163,20 @@ export function Lookbook() {
     return Math.hypot(dx, dy);
   };
 
+  const itemsPerRow = stepIdx === 0 ? 4 : stepIdx === 1 ? 3 : stepIdx === 2 ? 2 : 1;
+  const cardBasis =
+    itemsPerRow === 1
+      ? "100%"
+      : `calc((100% - ${(itemsPerRow - 1)} * var(--gutter-gap, 5px)) / ${itemsPerRow})`;
+
   return (
     <section className="w-full">
       <Container>
         <div
           ref={gridRef}
-          className="flex flex-wrap gutter-gap-1"
+          className={clsx(
+            "flex flex-wrap gutter-gap",
+          )}
           style={{
             overflowAnchor: "none",
             backgroundColor: "#fff",
@@ -168,13 +190,11 @@ export function Lookbook() {
               }}
               data-lookbook-idx={idx}
               className={clsx(
-                stepIdx === 0 && "span-w-3",
-                stepIdx === 1 && "span-w-4",
-                stepIdx === 2 && "span-w-6",
-                stepIdx === 3 && "span-w-12",
+                "shrink-0",
                 // Laisse le scroll vertical sur mobile.
                 "touch-pan-y select-none",
               )}
+              style={{ flexBasis: cardBasis, width: cardBasis }}
               onTouchStart={(e) => {
                 if (e.touches.length !== 2) return;
                 const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;

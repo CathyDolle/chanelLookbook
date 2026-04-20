@@ -5,6 +5,7 @@ import "@/style/globals.scss";
 import { Lenis } from "@/components";
 import clsx from "clsx";
 import { Grid } from "@/components/grid/Grid";
+import Header from "@/components/header/Header";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -31,6 +32,7 @@ export default function RootLayout({
           chanel.variable,
         )}
       >
+        <Header />
         {children}
         <Grid />
         <Lenis key={`lenis${(children as React.ReactElement)?.key}`} />

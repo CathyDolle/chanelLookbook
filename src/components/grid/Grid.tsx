@@ -26,7 +26,7 @@ export const Grid = () => {
 
 	return (
 		<div className='fixed inset-0 w-full h-full z-[999] pointer-events-none'>
-			<Container className='h-full flex flex-row gutter-gap-1'>
+			<Container className='h-full flex flex-row gutter-gap'>
 				{Array.from({length: 12}).map((_, i) => (
 					<div
 						key={i}
