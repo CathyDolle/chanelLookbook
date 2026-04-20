@@ -120,4 +120,30 @@
 		-ms-overflow-style: none;  /* IE and Edge */
 		scrollbar-width: none;  /* Firefox */
 	}
+
+	@keyframes skeleton-shimmer {
+		0% { transform: translateX(-120%); opacity: 0; }
+		20% { opacity: .55; }
+		60% { opacity: .55; }
+		100% { transform: translateX(120%); opacity: 0; }
+	}
+
+	.skeleton-shimmer {
+		background: #F0F0F0;
+		position: relative;
+		overflow: hidden;
+	}
+	.skeleton-shimmer::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		transform: translateX(-120%);
+		background: linear-gradient(
+			90deg,
+			transparent,
+			rgba(255, 255, 255, 0.55),
+			transparent
+		);
+		animation: skeleton-shimmer 1.6s cubic-bezier(.22, 1, .36, 1) infinite;
+	}
 }

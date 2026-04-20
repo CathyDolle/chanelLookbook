@@ -125,6 +125,8 @@ export function Lookbook() {
         return;
       }
 
+      const delay = Math.min(i * 8, 120);
+
       el.animate(
         [
           {
@@ -134,8 +136,10 @@ export function Lookbook() {
           { transformOrigin: "top left", transform: "none" },
         ],
         {
-          duration: 650,
-          easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+          duration: 560,
+          delay,
+          easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+          fill: "both",
         },
       );
     });
