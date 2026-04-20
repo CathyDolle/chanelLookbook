@@ -1,51 +1,81 @@
 [
-  {
-    "title": "Look 01",
-    "src": "i1"
-  },
-  {
-    "title": "Look 02",
-    "src": "i2"
-  },
-  {
-    "title": "Look 03",
-    "src": "i3"
-  },
-  {
-    "title": "Look 04",
-    "src": "i4"
-  },
-  {
-    "title": "Look 05",
-    "src": "i1"
-  },
-  {
-    "title": "Look 06",
-    "src": "i2"
-  },
-  {
-    "title": "Look 07",
-    "src": "i3"
-  },
-  {
-    "title": "Look 08",
-    "src": "i4"
-  },
-  {
-    "title": "Look 05",
-    "src": "i9"
-  },
-  {
-    "title": "Look 06",
-    "src": "i6"
-  },
-  {
-    "title": "Look 07",
-    "src": "i7"
-  },
-  {
-    "title": "Look 08",
-    "src": "i8"
-  }
+  { "title": "Look 001", "src": "001" },
+  { "title": "Look 002", "src": "002" },
+  { "title": "Look 003", "src": "003" },
+  { "title": "Look 004", "src": "004" },
+  { "title": "Look 005", "src": "005" },
+  { "title": "Look 006", "src": "006" },
+  { "title": "Look 007", "src": "007" },
+  { "title": "Look 008", "src": "008" },
+  { "title": "Look 009", "src": "009" },
+  { "title": "Look 010", "src": "010" },
+  { "title": "Look 011", "src": "011" },
+  { "title": "Look 012", "src": "012" },
+  { "title": "Look 013", "src": "013" },
+  { "title": "Look 014", "src": "014" },
+  { "title": "Look 015", "src": "015" },
+  { "title": "Look 016", "src": "016" },
+  { "title": "Look 017", "src": "017" },
+  { "title": "Look 018", "src": "018" },
+  { "title": "Look 019", "src": "019" },
+  { "title": "Look 020", "src": "020" },
+  { "title": "Look 021", "src": "021" },
+  { "title": "Look 022", "src": "022" },
+  { "title": "Look 023", "src": "023" },
+  { "title": "Look 024", "src": "024" },
+  { "title": "Look 025", "src": "025" },
+  { "title": "Look 026", "src": "026" },
+  { "title": "Look 027", "src": "027" },
+  { "title": "Look 028", "src": "028" },
+  { "title": "Look 029", "src": "029" },
+  { "title": "Look 030", "src": "030" },
+  { "title": "Look 031", "src": "031" },
+  { "title": "Look 032", "src": "032" },
+  { "title": "Look 033", "src": "033" },
+  { "title": "Look 034", "src": "034" },
+  { "title": "Look 035", "src": "035" },
+  { "title": "Look 036", "src": "036" },
+  { "title": "Look 037", "src": "037" },
+  { "title": "Look 038", "src": "038" },
+  { "title": "Look 039", "src": "039" },
+  { "title": "Look 040", "src": "040" },
+  { "title": "Look 041", "src": "041" },
+  { "title": "Look 042", "src": "042" },
+  { "title": "Look 043", "src": "043" },
+  { "title": "Look 044", "src": "044" },
+  { "title": "Look 045", "src": "045" },
+  { "title": "Look 046", "src": "046" },
+  { "title": "Look 047", "src": "047" },
+  { "title": "Look 048", "src": "048" },
+  { "title": "Look 049", "src": "049" },
+  { "title": "Look 050", "src": "050" },
+  { "title": "Look 051", "src": "051" },
+  { "title": "Look 052", "src": "052" },
+  { "title": "Look 053", "src": "053" },
+  { "title": "Look 054", "src": "054" },
+  { "title": "Look 055", "src": "055" },
+  { "title": "Look 056", "src": "056" },
+  { "title": "Look 057", "src": "057" },
+  { "title": "Look 058", "src": "058" },
+  { "title": "Look 059", "src": "059" },
+  { "title": "Look 060", "src": "060" },
+  { "title": "Look 061", "src": "061" },
+  { "title": "Look 062", "src": "062" },
+  { "title": "Look 063", "src": "063" },
+  { "title": "Look 064", "src": "064" },
+  { "title": "Look 065", "src": "065" },
+  { "title": "Look 066", "src": "066" },
+  { "title": "Look 067", "src": "067" },
+  { "title": "Look 068", "src": "068" },
+  { "title": "Look 069", "src": "069" },
+  { "title": "Look 070", "src": "070" },
+  { "title": "Look 071", "src": "071" },
+  { "title": "Look 072", "src": "072" },
+  { "title": "Look 073", "src": "073" },
+  { "title": "Look 074", "src": "074" },
+  { "title": "Look 075", "src": "075" },
+  { "title": "Look 076", "src": "076" },
+  { "title": "Look 077", "src": "077" },
+  { "title": "Look 078", "src": "078" }
 ]
 
