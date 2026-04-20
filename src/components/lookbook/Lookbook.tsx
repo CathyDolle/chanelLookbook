@@ -19,16 +19,17 @@ export function Lookbook() {
   const lastDesktopGestureAt = useRef<number>(0);
   const pendingFocus = useRef<{
     idx: number;
-    clientY: number;
+    desiredViewportY: number;
+    anchorY: number; // 0..1 dans la card
   } | null>(null);
 
   const pinch = useRef<{
     startDist: number;
     lastActionAt: number;
-    startScale: number;
-    originX: number;
-    originY: number;
-  }>({ startDist: 0, lastActionAt: 0, startScale: 1, originX: 0, originY: 0 });
+    targetIdx: number | null;
+    anchorY: number;
+    desiredViewportY: number;
+  }>({ startDist: 0, lastActionAt: 0, targetIdx: null, anchorY: 0.5, desiredViewportY: 0 });
 
   const PINCH_COOLDOWN_MS = 90;
   const PINCH_IN_THRESHOLD = 0.95; // plus sensible (zoom out)
@@ -52,23 +53,63 @@ export function Lookbook() {
     return Number.isFinite(idx) ? idx : null;
   };
 
+  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+  const computeDesiredViewportY = (clientY: number) => {
+    // La target doit rester dans la même "zone" que le doigt / curseur.
+    // On garde donc le Y de départ, avec une petite marge pour éviter d'être hors-écran.
+    const vh = typeof window !== "undefined" ? window.innerHeight : 0;
+    if (!vh) return clientY;
+    const margin = 16;
+    return clamp(clientY, margin, vh - margin);
+  };
+
+  const setFocusLocked = (idx: number, clientY: number, anchorY: number) => {
+    pendingFocus.current = {
+      idx,
+      desiredViewportY: computeDesiredViewportY(clientY),
+      anchorY: clamp01(anchorY),
+    };
+  };
+
   const setFocusFromPoint = (clientX: number, clientY: number) => {
     const idx = findCardIndexAtPoint(clientX, clientY);
     if (idx === null) return;
-    pendingFocus.current = { idx, clientY };
+    const el = cardRefs.current[idx];
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const anchorY = rect.height ? (clientY - rect.top) / rect.height : 0.5;
+    setFocusLocked(idx, clientY, anchorY);
   };
 
-  const requestZoomTo = (next: number, focusPoint?: { clientX: number; clientY: number }) => {
+  const requestZoomTo = (
+    next: number,
+    focusPoint?: { clientX: number; clientY: number },
+    locked?: { idx: number; clientY: number; anchorY: number },
+  ) => {
     const clamped = clampStep(next);
     if (clamped === stepIdxRef.current) return;
-    if (focusPoint) setFocusFromPoint(focusPoint.clientX, focusPoint.clientY);
+    // Si le pinch est actif, ne jamais repicker une autre card pendant le reflow.
+    if (locked) setFocusLocked(locked.idx, locked.clientY, locked.anchorY);
+    else if (focusPoint) setFocusFromPoint(focusPoint.clientX, focusPoint.clientY);
     setStepIdx(clamped);
   };
 
-  const zoomInAll = (focusPoint?: { clientX: number; clientY: number }) =>
-    requestZoomTo(stepIdxRef.current + 1, focusPoint);
-  const zoomOutAll = (focusPoint?: { clientX: number; clientY: number }) =>
-    requestZoomTo(stepIdxRef.current - 1, focusPoint);
+  const zoomInAll = (
+    focusPoint?: { clientX: number; clientY: number },
+    locked?: { idx: number; clientY: number; anchorY: number },
+  ) => requestZoomTo(stepIdxRef.current + 1, focusPoint, locked);
+  const zoomOutAll = (
+    focusPoint?: { clientX: number; clientY: number },
+    locked?: { idx: number; clientY: number; anchorY: number },
+  ) => requestZoomTo(stepIdxRef.current - 1, focusPoint, locked);
+
+  useEffect(() => {
+    // Au refresh, repartir toujours en haut de la page.
+    if (typeof window === "undefined") return;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
 
   useEffect(() => {
     // Bloque le zoom navigateur (Ctrl/Cmd +/-/0 et Ctrl/Cmd+wheel/pinch trackpad)
@@ -128,7 +169,8 @@ export function Lookbook() {
     const el = cardRefs.current[focus.idx];
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const deltaY = rect.top - focus.clientY;
+    const anchorClientY = rect.top + rect.height * focus.anchorY;
+    const deltaY = anchorClientY - focus.desiredViewportY;
     if (Math.abs(deltaY) > 1) window.scrollTo({ top: window.scrollY + deltaY });
   }, [stepIdx]);
 
@@ -201,7 +243,16 @@ export function Lookbook() {
                 const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
 
-                setFocusFromPoint(midX, midY);
+                // Verrouille la target dès le début du pinch (même image du début à la fin).
+                const targetIdx = findCardIndexAtPoint(midX, midY);
+                if (targetIdx === null) return;
+                pinch.current.targetIdx = targetIdx;
+                const el = cardRefs.current[targetIdx];
+                const rect = el?.getBoundingClientRect();
+                pinch.current.anchorY = rect?.height ? clamp01((midY - rect.top) / rect.height) : 0.5;
+                pinch.current.desiredViewportY = computeDesiredViewportY(midY);
+
+                setFocusLocked(targetIdx, midY, pinch.current.anchorY);
                 pinch.current.startDist = getTouchDist(e.touches[0], e.touches[1]);
                 pinch.current.lastActionAt = Date.now();
               }}
@@ -219,22 +270,32 @@ export function Lookbook() {
                 const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
                 const focusPoint = { clientX: midX, clientY: midY };
+                const locked =
+                  pinch.current.targetIdx === null
+                    ? undefined
+                    : {
+                        idx: pinch.current.targetIdx,
+                        clientY: pinch.current.desiredViewportY,
+                        anchorY: pinch.current.anchorY,
+                      };
 
                 if (ratio > PINCH_OUT_THRESHOLD) {
-                  zoomInAll(focusPoint);
+                  zoomInAll(focusPoint, locked);
                   pinch.current.startDist = dist;
                   pinch.current.lastActionAt = now;
                 } else if (ratio < PINCH_IN_THRESHOLD) {
-                  zoomOutAll(focusPoint);
+                  zoomOutAll(focusPoint, locked);
                   pinch.current.startDist = dist;
                   pinch.current.lastActionAt = now;
                 }
               }}
               onTouchEnd={() => {
                 pinch.current.startDist = 0;
+                pinch.current.targetIdx = null;
               }}
               onTouchCancel={() => {
                 pinch.current.startDist = 0;
+                pinch.current.targetIdx = null;
               }}
             >
               <LookbookCard
