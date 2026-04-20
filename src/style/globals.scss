@@ -12,7 +12,9 @@
 	
 		--header-height-mobile: calc(var(--header) + var(--header-link));
 
-		overflow-y: scroll;
+		// Bloque le scroll vertical globalement (Y)
+		overflow-y: hidden;
+		overscroll-behavior-y: none;
 
 		@screen lg {
 			--nav: #{to-rem(54)};
@@ -63,9 +65,12 @@
 	body {
 		overscroll-behavior: none;
 		white-space: pre-wrap;
+		// Empêche les gestes de pan vertical sur mobile (réduit l'impression de "zoom/déplacement")
+		touch-action: pan-x;
 	}
 	body, html {
 		overscroll-behavior: contain;
+		overflow-y: hidden;
 	}
 	p,h1,h2,h3,h4 {
 		text-wrap: balance;
