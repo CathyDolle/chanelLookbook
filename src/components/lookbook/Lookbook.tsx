@@ -44,6 +44,7 @@ export function Lookbook() {
   const [topNavHidden, setTopNavHidden] = useState(false);
   const [activeLookIdx, setActiveLookIdx] = useState(0);
   const scrollRaf = useRef<number | null>(null);
+  const scrollYAtOpenRef = useRef<number>(0);
   const [coverReadyIdx, setCoverReadyIdx] = useState<number | null>(null);
   const [coverTransition, setCoverTransition] =
     useState<CoverTransitionState>(null);
@@ -240,6 +241,9 @@ export function Lookbook() {
     if (!el) return;
 
     const update = () => {
+      // Évite les jumps de scroll: on fige la hauteur du spacer
+      // pendant la vue full (open/exiting) car le layout de la grille change.
+      if (focus.open) return;
       // On ne peut pas utiliser "inset-0" sinon la hauteur est contrainte par le spacer (boucle).
       // Ici on mesure la hauteur réelle du contenu.
       const next = Math.ceil(el.getBoundingClientRect().height);
@@ -256,7 +260,7 @@ export function Lookbook() {
     const ro = new ResizeObserver(() => update());
     ro.observe(el);
     return () => ro.disconnect();
-  }, [stepIdx]);
+  }, [stepIdx, focus.open]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -349,6 +353,58 @@ export function Lookbook() {
     return () => gridEl.removeEventListener("transitionend", onTransitionEnd);
   }, [focus]);
 
+  useLayoutEffect(() => {
+    if (!focus.open) return;
+    if (focus.phase !== "exiting") return;
+    const gridEl = gridRef.current;
+    const st = gridAnim.current;
+    if (!gridEl || !st) return;
+
+    // Remet la grille "au-dessus" avant l'anim inverse
+    gridEl.style.opacity = "1";
+    gridEl.style.pointerEvents = "auto";
+    // On garde le fond d'origine de la grille pour ne pas masquer l'anim.
+
+    // Recrée le transformOpen pour le look actif en layout grille (flex-wrap).
+    gridEl.style.transition = "none";
+    gridEl.style.position = "fixed";
+    gridEl.style.left = `${st.left}px`;
+    gridEl.style.top = `${st.top}px`;
+    gridEl.style.width = `${st.width}px`;
+    gridEl.style.height = `${st.height}px`;
+    gridEl.style.transformOrigin = "0 0";
+    gridEl.style.willChange = "transform";
+    gridEl.style.transform = "translate3d(0px, 0px, 0px) scale3d(1, 1, 1)";
+    void gridEl.getBoundingClientRect();
+
+    const cardEl = cardRefs.current[focus.idx];
+    if (!cardEl) return;
+
+    const gridR = gridEl.getBoundingClientRect();
+    const cardR = cardEl.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const s = Math.max(vw / cardR.width, vh / cardR.height);
+    const x = cardR.left - gridR.left;
+    const y = cardR.top - gridR.top;
+    const desiredLeft = (vw - cardR.width * s) / 2;
+    const desiredTop = (vh - cardR.height * s) / 2;
+    const tx = desiredLeft - gridR.left - x * s;
+    const ty = desiredTop - gridR.top - y * s;
+    const transformOpen3d = `translate3d(${tx}px, ${ty}px, 0px) scale3d(${s}, ${s}, 1)`;
+
+    gridEl.style.transform = transformOpen3d;
+    void gridEl.getBoundingClientRect();
+
+    gridEl.style.transition = isReducedMotion()
+      ? "none"
+      : `transform ${FOCUS_ZOOM_MS}ms ${FOCUS_ZOOM_EASE}`;
+    void gridEl.getBoundingClientRect();
+    requestAnimationFrame(() => {
+      gridEl.style.transform = "translate3d(0px, 0px, 0px) scale3d(1, 1, 1)";
+    });
+  }, [focus]);
+
   const openFocusFromGrid = (idx: number) => {
     const el = cardRefs.current[idx];
     const gridEl = gridRef.current;
@@ -423,6 +479,7 @@ export function Lookbook() {
     gridEl.style.transform = "translate3d(0px, 0px, 0px) scale3d(1, 1, 1)";
     void gridEl.getBoundingClientRect();
 
+    scrollYAtOpenRef.current = window.scrollY;
     setFocus({ open: true, idx, phase: "entering" });
     setTopNavHidden(false);
     setActiveLookIdx(idx);
@@ -436,42 +493,11 @@ export function Lookbook() {
     if (!focus.open) return;
     // Cache la top-nav immédiatement au clic (avant l'anim)
     setTopNavHidden(true);
-    const gridEl = gridRef.current;
-    const st = gridAnim.current;
-    if (!gridEl || !st) {
-      setFocus({ open: false });
-      return;
-    }
-
     setCoverTransition(null);
-    setFocus((prev) => (prev.open ? { ...prev, phase: "exiting" } : prev));
-    // On repasse la grille visible au-dessus du feed avant l'anim inverse.
-    gridEl.style.opacity = "1";
-    gridEl.style.pointerEvents = "auto";
-
-    // Si on est en mode feed (plein écran sans transform), on repasse dans la
-    // représentation "gridR + transformOpen" sans changement visuel, puis on anime vers identity.
-    if (focus.phase === "open") {
-      gridEl.style.transition = "none";
-      gridEl.style.position = "fixed";
-      gridEl.style.left = `${st.left}px`;
-      gridEl.style.top = `${st.top}px`;
-      gridEl.style.width = `${st.width}px`;
-      gridEl.style.height = `${st.height}px`;
-      gridEl.style.transformOrigin = "0 0";
-      gridEl.style.willChange = "transform";
-      gridEl.style.transform = st.transformOpen;
-      void gridEl.getBoundingClientRect();
-    }
-
-    // force layout puis anim inverse
-    gridEl.style.transition = isReducedMotion()
-      ? "none"
-      : `transform ${FOCUS_ZOOM_MS}ms ${FOCUS_ZOOM_EASE}`;
-    void gridEl.getBoundingClientRect();
-    requestAnimationFrame(() => {
-      gridEl.style.transform = "translate3d(0px, 0px, 0px) scale3d(1, 1, 1)";
-    });
+    // Ferme depuis le look actuellement visible dans le feed
+    setFocus((prev) =>
+      prev.open ? { ...prev, idx: activeLookIdx, phase: "exiting" } : prev,
+    );
   };
 
   const formatLookTitle = (idx: number) => {
