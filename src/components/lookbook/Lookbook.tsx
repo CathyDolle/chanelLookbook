@@ -1,9 +1,10 @@
-'use client'
+"use client";
 import { Container } from "@/components";
 import LookbookCard from "@/components/ui/lookbookCard";
 import { lookbookImages, type LookbookImageKey } from "@/assets/images";
 import lookbook from "@/data/lookbook.json";
 import { lookContentByLook, type LookContentItem } from "./lookContent";
+import { LookTopNav } from "./LookTopNav";
 import clsx from "clsx";
 import Image from "next/image";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -16,16 +17,14 @@ type FocusState =
       phase: "entering" | "settling" | "open" | "exiting";
     };
 
-type CoverTransitionState =
-  | null
-  | {
-      idx: number;
-      lookKey: LookbookImageKey;
-      title: string;
-      from: { left: number; top: number; width: number; height: number };
-      to: { left: number; top: number; width: number; height: number };
-      phase: "from" | "to" | "final";
-    };
+type CoverTransitionState = null | {
+  idx: number;
+  lookKey: LookbookImageKey;
+  title: string;
+  from: { left: number; top: number; width: number; height: number };
+  to: { left: number; top: number; width: number; height: number };
+  phase: "from" | "to" | "final";
+};
 
 export function Lookbook() {
   const spanSteps = useMemo(() => [3, 4, 6, 12] as const, []);
@@ -42,8 +41,12 @@ export function Lookbook() {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [gridHeight, setGridHeight] = useState<number>(0);
   const [focus, setFocus] = useState<FocusState>({ open: false });
+  const [topNavHidden, setTopNavHidden] = useState(false);
+  const [activeLookIdx, setActiveLookIdx] = useState(0);
+  const scrollRaf = useRef<number | null>(null);
   const [coverReadyIdx, setCoverReadyIdx] = useState<number | null>(null);
-  const [coverTransition, setCoverTransition] = useState<CoverTransitionState>(null);
+  const [coverTransition, setCoverTransition] =
+    useState<CoverTransitionState>(null);
   const gridAnim = useRef<{
     backupCssText: string;
     transformOpen: string;
@@ -65,7 +68,13 @@ export function Lookbook() {
     targetIdx: number | null;
     anchorY: number;
     desiredViewportY: number;
-  }>({ startDist: 0, lastActionAt: 0, targetIdx: null, anchorY: 0.5, desiredViewportY: 0 });
+  }>({
+    startDist: 0,
+    lastActionAt: 0,
+    targetIdx: null,
+    anchorY: 0.5,
+    desiredViewportY: 0,
+  });
 
   const PINCH_COOLDOWN_MS = 90;
   const PINCH_IN_THRESHOLD = 0.95; // plus sensible (zoom out)
@@ -82,7 +91,10 @@ export function Lookbook() {
 
   const findCardIndexAtPoint = (clientX: number, clientY: number) => {
     if (typeof document === "undefined") return null;
-    const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+    const el = document.elementFromPoint(
+      clientX,
+      clientY,
+    ) as HTMLElement | null;
     if (!el) return null;
     const card = el.closest?.("[data-lookbook-idx]") as HTMLElement | null;
     if (!card) return null;
@@ -92,7 +104,8 @@ export function Lookbook() {
   };
 
   const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+  const clamp = (v: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, v));
 
   const computeDesiredViewportY = (clientY: number) => {
     // La target doit rester dans la même "zone" que le doigt / curseur.
@@ -130,7 +143,8 @@ export function Lookbook() {
     if (clamped === stepIdxRef.current) return;
     // Si le pinch est actif, ne jamais repicker une autre card pendant le reflow.
     if (locked) setFocusLocked(locked.idx, locked.clientY, locked.anchorY);
-    else if (focusPoint) setFocusFromPoint(focusPoint.clientX, focusPoint.clientY);
+    else if (focusPoint)
+      setFocusFromPoint(focusPoint.clientX, focusPoint.clientY);
     setStepIdx(clamped);
   };
 
@@ -155,7 +169,8 @@ export function Lookbook() {
     const onKeyDown = (e: KeyboardEvent) => {
       const key = e.key;
       const isZoomShortcut =
-        (e.ctrlKey || e.metaKey) && (key === "+" || key === "-" || key === "=" || key === "0");
+        (e.ctrlKey || e.metaKey) &&
+        (key === "+" || key === "-" || key === "=" || key === "0");
       if (isZoomShortcut) e.preventDefault();
 
       if (e.repeat) return;
@@ -185,9 +200,15 @@ export function Lookbook() {
 
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("wheel", onWheel, { passive: false });
-    window.addEventListener("gesturestart", onGesture as EventListener, { passive: false });
-    window.addEventListener("gesturechange", onGesture as EventListener, { passive: false });
-    window.addEventListener("gestureend", onGesture as EventListener, { passive: false });
+    window.addEventListener("gesturestart", onGesture as EventListener, {
+      passive: false,
+    });
+    window.addEventListener("gesturechange", onGesture as EventListener, {
+      passive: false,
+    });
+    window.addEventListener("gestureend", onGesture as EventListener, {
+      passive: false,
+    });
 
     return () => {
       window.removeEventListener("keydown", onKeyDown);
@@ -252,7 +273,11 @@ export function Lookbook() {
     if (focus.phase !== "open") return;
     const gridEl = gridRef.current;
     if (!gridEl) return;
-    gridEl.scrollTo({ top: focus.idx * window.innerHeight, left: 0, behavior: "auto" });
+    gridEl.scrollTo({
+      top: focus.idx * window.innerHeight,
+      left: 0,
+      behavior: "auto",
+    });
   }, [focus]);
 
   useEffect(() => {
@@ -302,7 +327,8 @@ export function Lookbook() {
           gridEl.style.top = "0px";
           gridEl.style.width = "100vw";
           gridEl.style.height = "var(--vvh, 100vh)";
-          gridEl.style.transform = "translate3d(0px, 0px, 0px) scale3d(1, 1, 1)";
+          gridEl.style.transform =
+            "translate3d(0px, 0px, 0px) scale3d(1, 1, 1)";
           void gridEl.getBoundingClientRect();
           setCoverTransition(null);
           return { ...prev, phase: "open" };
@@ -347,7 +373,12 @@ export function Lookbook() {
       idx,
       lookKey,
       title,
-      from: { left: cardR.left, top: cardR.top, width: cardR.width, height: cardR.height },
+      from: {
+        left: cardR.left,
+        top: cardR.top,
+        width: cardR.width,
+        height: cardR.height,
+      },
       to: { left: targetLeft, top: targetTop, width: targetW, height: targetH },
       phase: "from",
     });
@@ -393,6 +424,8 @@ export function Lookbook() {
     void gridEl.getBoundingClientRect();
 
     setFocus({ open: true, idx, phase: "entering" });
+    setTopNavHidden(false);
+    setActiveLookIdx(idx);
 
     requestAnimationFrame(() => {
       gridEl.style.transform = transformOpen3d;
@@ -401,6 +434,8 @@ export function Lookbook() {
 
   const closeFocusToGrid = () => {
     if (!focus.open) return;
+    // Cache la top-nav immédiatement au clic (avant l'anim)
+    setTopNavHidden(true);
     const gridEl = gridRef.current;
     const st = gridAnim.current;
     if (!gridEl || !st) {
@@ -439,6 +474,22 @@ export function Lookbook() {
     });
   };
 
+  const formatLookTitle = (idx: number) => {
+    const n = idx + 1;
+    return `Look ${String(n).padStart(2, "0")}`;
+  };
+
+  const onFeedScroll = () => {
+    const el = gridRef.current;
+    if (!el) return;
+    if (scrollRaf.current) cancelAnimationFrame(scrollRaf.current);
+    scrollRaf.current = requestAnimationFrame(() => {
+      const vh = window.innerHeight || 1;
+      const idx = Math.max(0, Math.min(lookbook.length - 1, Math.round(el.scrollTop / vh)));
+      setActiveLookIdx((prev) => (prev === idx ? prev : idx));
+    });
+  };
+
   useEffect(() => {
     // Reveal du feed seulement quand la cover du look courant est prête.
     if (!focus.open) return;
@@ -464,11 +515,21 @@ export function Lookbook() {
     // Rend la gouttière globale (toute la page), pas juste le composant.
     const key = gutterSteps[stepIdx] ?? "m";
     const root = document.documentElement;
-    root.classList.remove("gutter-gap-xs", "gutter-gap-s", "gutter-gap-m", "gutter-gap-l");
+    root.classList.remove(
+      "gutter-gap-xs",
+      "gutter-gap-s",
+      "gutter-gap-m",
+      "gutter-gap-l",
+    );
     root.classList.add(`gutter-gap-${key}`);
 
     return () => {
-      root.classList.remove("gutter-gap-xs", "gutter-gap-s", "gutter-gap-m", "gutter-gap-l");
+      root.classList.remove(
+        "gutter-gap-xs",
+        "gutter-gap-s",
+        "gutter-gap-m",
+        "gutter-gap-l",
+      );
       root.classList.add("gutter-gap-m");
     };
   }, [stepIdx, gutterSteps]);
@@ -495,11 +556,12 @@ export function Lookbook() {
     return Math.hypot(dx, dy);
   };
 
-  const itemsPerRow = stepIdx === 0 ? 4 : stepIdx === 1 ? 3 : stepIdx === 2 ? 2 : 1;
+  const itemsPerRow =
+    stepIdx === 0 ? 4 : stepIdx === 1 ? 3 : stepIdx === 2 ? 2 : 1;
   const cardBasis =
     itemsPerRow === 1
       ? "100%"
-      : `calc((100% - ${(itemsPerRow - 1)} * var(--gutter-gap, 5px)) / ${itemsPerRow})`;
+      : `calc((100% - ${itemsPerRow - 1} * var(--gutter-gap, 5px)) / ${itemsPerRow})`;
 
   return (
     <section className="w-full">
@@ -519,6 +581,7 @@ export function Lookbook() {
               overflowAnchor: "none",
               backgroundColor: isFeedMode ? "#000" : "#fff",
             }}
+            onScroll={isFeedMode ? onFeedScroll : undefined}
           >
             {lookbook.map((item, idx) => (
               <div
@@ -542,8 +605,10 @@ export function Lookbook() {
                 onClick={() => openFocusFromGrid(idx)}
                 onTouchStart={(e) => {
                   if (e.touches.length !== 2) return;
-                  const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                  const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                  const midX =
+                    (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                  const midY =
+                    (e.touches[0].clientY + e.touches[1].clientY) / 2;
 
                   // Verrouille la target dès le début du pinch (même image du début à la fin).
                   const targetIdx = findCardIndexAtPoint(midX, midY);
@@ -554,10 +619,14 @@ export function Lookbook() {
                   pinch.current.anchorY = rect?.height
                     ? clamp01((midY - rect.top) / rect.height)
                     : 0.5;
-                  pinch.current.desiredViewportY = computeDesiredViewportY(midY);
+                  pinch.current.desiredViewportY =
+                    computeDesiredViewportY(midY);
 
                   setFocusLocked(targetIdx, midY, pinch.current.anchorY);
-                  pinch.current.startDist = getTouchDist(e.touches[0], e.touches[1]);
+                  pinch.current.startDist = getTouchDist(
+                    e.touches[0],
+                    e.touches[1],
+                  );
                   pinch.current.lastActionAt = Date.now();
                 }}
                 onTouchMove={(e) => {
@@ -565,14 +634,17 @@ export function Lookbook() {
                   e.preventDefault();
 
                   const now = Date.now();
-                  if (now - pinch.current.lastActionAt < PINCH_COOLDOWN_MS) return;
+                  if (now - pinch.current.lastActionAt < PINCH_COOLDOWN_MS)
+                    return;
 
                   const dist = getTouchDist(e.touches[0], e.touches[1]);
                   if (!pinch.current.startDist) return;
 
                   const ratio = dist / pinch.current.startDist;
-                  const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                  const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                  const midX =
+                    (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                  const midY =
+                    (e.touches[0].clientY + e.touches[1].clientY) / 2;
                   const focusPoint = { clientX: midX, clientY: midY };
                   const locked =
                     pinch.current.targetIdx === null
@@ -607,8 +679,12 @@ export function Lookbook() {
                     lookKey={item.src as LookbookImageKey}
                     coverTitle={item.title}
                     coverImg={lookbookImages[item.src as LookbookImageKey]}
-                    content={lookContentByLook[item.src as LookbookImageKey] ?? []}
-                    active={focus.open && focus.idx === idx && focus.phase === "open"}
+                    content={
+                      lookContentByLook[item.src as LookbookImageKey] ?? []
+                    }
+                    active={
+                      focus.open && focus.idx === idx && focus.phase === "open"
+                    }
                     onCoverReady={() => {
                       if (idx === focus.idx) setCoverReadyIdx(idx);
                     }}
@@ -617,7 +693,11 @@ export function Lookbook() {
                   <div
                     style={{
                       opacity:
-                        coverTransition && coverTransition.idx === idx && focus.open ? 0 : 1,
+                        coverTransition &&
+                        coverTransition.idx === idx &&
+                        focus.open
+                          ? 0
+                          : 1,
                     }}
                   >
                     <LookbookCard
@@ -637,19 +717,23 @@ export function Lookbook() {
           className="fixed z-[1001] overflow-hidden bg-white"
           style={{
             left:
-              (coverTransition.phase === "to" || coverTransition.phase === "final"
+              (coverTransition.phase === "to" ||
+              coverTransition.phase === "final"
                 ? coverTransition.to.left
                 : coverTransition.from.left) + "px",
             top:
-              (coverTransition.phase === "to" || coverTransition.phase === "final"
+              (coverTransition.phase === "to" ||
+              coverTransition.phase === "final"
                 ? coverTransition.to.top
                 : coverTransition.from.top) + "px",
             width:
-              (coverTransition.phase === "to" || coverTransition.phase === "final"
+              (coverTransition.phase === "to" ||
+              coverTransition.phase === "final"
                 ? coverTransition.to.width
                 : coverTransition.from.width) + "px",
             height:
-              (coverTransition.phase === "to" || coverTransition.phase === "final"
+              (coverTransition.phase === "to" ||
+              coverTransition.phase === "final"
                 ? coverTransition.to.height
                 : coverTransition.from.height) + "px",
             transition: isReducedMotion()
@@ -662,8 +746,11 @@ export function Lookbook() {
             pointerEvents: "none",
           }}
           onTransitionEnd={(e) => {
-            if (e.propertyName !== "width" && e.propertyName !== "height") return;
-            setCoverTransition((prev) => (prev ? { ...prev, phase: "final" } : prev));
+            if (e.propertyName !== "width" && e.propertyName !== "height")
+              return;
+            setCoverTransition((prev) =>
+              prev ? { ...prev, phase: "final" } : prev,
+            );
           }}
         >
           <Image
@@ -675,20 +762,21 @@ export function Lookbook() {
             priority
             quality={100}
             onLoadingComplete={() => {
-              if (focus.open && focus.idx === coverTransition.idx) setCoverReadyIdx(coverTransition.idx);
+              if (focus.open && focus.idx === coverTransition.idx)
+                setCoverReadyIdx(coverTransition.idx);
             }}
           />
         </div>
       )}
 
-      {focus.open && (
-        <button
-          type="button"
-          className="fixed left-16 top-16 z-[1002] rounded-full bg-black/70 px-12 py-8 text-12 text-white backdrop-blur"
-          onClick={closeFocusToGrid}
-        >
-          Fermer
-        </button>
+      {focus.open && focus.phase === "open" && !topNavHidden && (
+        <LookTopNav
+          title={formatLookTitle(activeLookIdx)}
+          onBack={closeFocusToGrid}
+          onToggleFav={() => {
+            // placeholder: favoris à venir
+          }}
+        />
       )}
     </section>
   );
@@ -734,70 +822,79 @@ function LookHorizontalCarousel({
           if (rafRef.current) cancelAnimationFrame(rafRef.current);
           rafRef.current = requestAnimationFrame(() => {
             const w = window.innerWidth || 1;
-            const next = Math.max(0, Math.min(slideCount - 1, Math.round(el.scrollLeft / w)));
+            const next = Math.max(
+              0,
+              Math.min(slideCount - 1, Math.round(el.scrollLeft / w)),
+            );
             setSlideIdx(next);
           });
         }}
       >
         <div className="flex h-full w-max">
-        {/* Slide 0: cover (retour au feed en swipant back ici) */}
-        <div className="flex h-full w-[100vw] items-center justify-center overflow-hidden bg-black [scroll-snap-align:start]">
-          <div
-            className="relative overflow-hidden"
-            style={{
-              aspectRatio: "3 / 4",
-              height: "var(--vvh, 100vh)",
-              width: "calc(var(--vvh, 100vh) * 0.75)",
-            }}
-          >
-            <Image
-              src={coverImg}
-              alt={coverTitle}
-              fill
-              className="object-cover"
-              sizes="100vw"
-              priority
-              quality={100}
-              onLoadingComplete={onCoverReady}
-            />
-          </div>
-        </div>
-
-        {/* Slides suivants: contenu (plein écran) */}
-        {content.length ? (
-          content.map((it, i) => (
+          {/* Slide 0: cover (retour au feed en swipant back ici) */}
+          <div className="flex h-full w-[100vw] items-center justify-center overflow-hidden bg-black [scroll-snap-align:start]">
             <div
-              key={`${lookKey}-${it.type}-${i}`}
-              className="relative h-[var(--vvh,100vh)] w-[100vw] overflow-hidden bg-black [scroll-snap-align:start]"
+              className="relative overflow-hidden"
+              style={{
+                aspectRatio: "3 / 4",
+                height: "var(--vvh, 100vh)",
+                width: "calc(var(--vvh, 100vh) * 0.75)",
+              }}
             >
-              {it.type === "image" ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={it.src} alt={coverTitle} className="h-full w-full object-cover" />
-              ) : (
-                <video
-                  className="h-full w-full object-cover"
-                  src={it.src}
-                  playsInline
-                  muted
-                  autoPlay
-                  loop
-                />
-              )}
-            </div>
-          ))
-        ) : (
-          <div className="flex h-full w-[100vw] items-center justify-center bg-black px-24 text-center text-white [scroll-snap-align:start]">
-            <div>
-              <div className="text-14 opacity-80">{coverTitle}</div>
-              <div className="mt-8 text-12 opacity-60">Contenu à venir pour {lookKey}.</div>
+              <Image
+                src={coverImg}
+                alt={coverTitle}
+                fill
+                className="object-cover"
+                sizes="100vw"
+                priority
+                quality={100}
+                onLoadingComplete={onCoverReady}
+              />
             </div>
           </div>
-        )}
+
+          {/* Slides suivants: contenu (plein écran) */}
+          {content.length ? (
+            content.map((it, i) => (
+              <div
+                key={`${lookKey}-${it.type}-${i}`}
+                className="relative h-[var(--vvh,100vh)] w-[100vw] overflow-hidden bg-black [scroll-snap-align:start]"
+              >
+                {it.type === "image" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={it.src}
+                    alt={coverTitle}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <video
+                    className="h-full w-full object-cover"
+                    src={it.src}
+                    playsInline
+                    muted
+                    autoPlay
+                    loop
+                  />
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="flex h-full w-[100vw] items-center justify-center bg-black px-24 text-center text-white [scroll-snap-align:start]">
+              <div>
+                <div className="text-14 opacity-80">{coverTitle}</div>
+                <div className="mt-8 text-12 opacity-60">
+                  Contenu à venir pour {lookKey}.
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Stepper au-dessus */}
-        {slideCount > 1 && (
+      {slideCount > 1 && (
         <div className="pointer-events-none absolute bottom-16 left-0 right-0 z-10 flex justify-center">
           <div className="flex items-center gap-6 rounded-full bg-black/40 px-10 py-6 backdrop-blur">
             {Array.from({ length: slideCount }).map((_, i) => (
@@ -805,7 +902,9 @@ function LookHorizontalCarousel({
                 key={`${lookKey}-dot-${i}`}
                 className={clsx(
                   "h-6 w-6 rounded-full transition-opacity",
-                  i === slideIdx ? "bg-white opacity-100" : "bg-white opacity-40",
+                  i === slideIdx
+                    ? "bg-white opacity-100"
+                    : "bg-white opacity-40",
                 )}
               />
             ))}
@@ -815,4 +914,3 @@ function LookHorizontalCarousel({
     </div>
   );
 }
-
