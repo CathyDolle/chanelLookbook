@@ -621,7 +621,10 @@ export function Lookbook() {
     gridEl.style.height = `${gridR.height}px`;
     gridEl.style.zIndex = "1000";
     gridEl.style.transformOrigin = "0 0";
-    gridEl.style.willChange = "transform";
+    // Mobile perf: force compositing, évite des flickers pendant le scale.
+    (gridEl.style as any).webkitBackfaceVisibility = "hidden";
+    gridEl.style.backfaceVisibility = "hidden";
+    gridEl.style.willChange = "transform, opacity";
     gridEl.style.transition = isReducedMotion()
       ? "none"
       : `transform ${FOCUS_ZOOM_MS}ms ${FOCUS_ZOOM_EASE}`;
@@ -984,8 +987,11 @@ export function Lookbook() {
               : coverTransition.phase === "to"
                 ? `left ${FOCUS_ZOOM_MS}ms ${FOCUS_ZOOM_EASE}, top ${FOCUS_ZOOM_MS}ms ${FOCUS_ZOOM_EASE}, width ${FOCUS_ZOOM_MS}ms ${FOCUS_ZOOM_EASE}, height ${FOCUS_ZOOM_MS}ms ${FOCUS_ZOOM_EASE}`
                 : "none",
+            // Mobile perf: éviter des artefacts pendant l’anim layout.
             willChange: "left, top, width, height",
-            transform: "translateZ(0)",
+            transform: "translate3d(0px, 0px, 0px)",
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
             pointerEvents: "none",
           }}
           onTransitionEnd={(e) => {
