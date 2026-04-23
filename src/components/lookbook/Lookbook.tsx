@@ -858,7 +858,7 @@ function LookHorizontalCarousel({
       >
         <div className="flex h-full w-max">
           {/* Slide 0: cover (retour au feed en swipant back ici) */}
-          <div className="flex h-full w-[100vw] items-center justify-center overflow-hidden bg-black [scroll-snap-align:start]">
+          <div className="relative flex h-full w-[100vw] items-center justify-center overflow-hidden bg-black [scroll-snap-align:start]">
             <div
               className="relative overflow-hidden"
               style={{
@@ -878,6 +878,10 @@ function LookHorizontalCarousel({
                 onLoadingComplete={onCoverReady}
               />
             </div>
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent"
+            />
           </div>
 
           {/* Slides suivants: contenu (plein écran) */}
@@ -904,16 +908,24 @@ function LookHorizontalCarousel({
                     loop
                   />
                 )}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent"
+                />
               </div>
             ))
           ) : (
-            <div className="flex h-full w-[100vw] items-center justify-center bg-black px-24 text-center text-white [scroll-snap-align:start]">
+            <div className="relative flex h-full w-[100vw] items-center justify-center bg-black px-24 text-center text-white [scroll-snap-align:start]">
               <div>
                 <div className="text-14 opacity-80">{coverTitle}</div>
                 <div className="mt-8 text-12 opacity-60">
                   Contenu à venir pour {lookKey}.
                 </div>
               </div>
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent"
+              />
             </div>
           )}
         </div>
