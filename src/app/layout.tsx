@@ -6,7 +6,6 @@ import { Lenis } from "@/components";
 import clsx from "clsx";
 import { Grid } from "@/components/grid/Grid";
 import Header from "@/components/header/Header";
-import InitialLoader from "@/components/loader/InitialLoader";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -34,7 +33,6 @@ export default function RootLayout({
           abChanel.variable,
         )}
       >
-        <InitialLoader />
         <Header />
         {children}
         <Grid />
