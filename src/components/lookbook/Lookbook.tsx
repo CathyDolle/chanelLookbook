@@ -45,6 +45,7 @@ export function Lookbook() {
   const [topNavHidden, setTopNavHidden] = useState(false);
   const [activeLookIdx, setActiveLookIdx] = useState(0);
   const [fullUiVisible, setFullUiVisible] = useState(false);
+  const [coverZoomGlobalOpen, setCoverZoomGlobalOpen] = useState(false);
   const scrollRaf = useRef<number | null>(null);
   const scrollYAtOpenRef = useRef<number>(0);
   const [coverReadyIdx, setCoverReadyIdx] = useState<number | null>(null);
@@ -506,6 +507,7 @@ export function Lookbook() {
     scrollYAtOpenRef.current = window.scrollY;
     setFocus({ open: true, idx, phase: "entering" });
     setTopNavHidden(false);
+    setCoverZoomGlobalOpen(false);
     setActiveLookIdx(idx);
 
     requestAnimationFrame(() => {
@@ -517,6 +519,7 @@ export function Lookbook() {
     if (!focus.open) return;
     // Cache la top-nav immédiatement au clic (avant l'anim)
     setTopNavHidden(true);
+    setCoverZoomGlobalOpen(false);
     setCoverTransition(null);
     // Ferme depuis le look actuellement visible dans le feed
     setFocus((prev) =>
@@ -741,9 +744,14 @@ export function Lookbook() {
                       lookContentByLook[item.src as LookbookImageKey] ?? []
                     }
                     active={
-                      focus.open && focus.idx === idx && focus.phase === "open"
+                      focus.open &&
+                      focus.phase === "open" &&
+                      activeLookIdx === idx
                     }
                     uiVisible={fullUiVisible}
+                    onCoverZoomChange={(open) => {
+                      setCoverZoomGlobalOpen(open);
+                    }}
                     onCoverReady={() => {
                       if (idx === focus.idx) setCoverReadyIdx(idx);
                     }}
@@ -828,7 +836,10 @@ export function Lookbook() {
         </div>
       )}
 
-      {focus.open && focus.phase === "open" && !topNavHidden && (
+      {focus.open &&
+        focus.phase === "open" &&
+        !topNavHidden &&
+        !coverZoomGlobalOpen && (
         <>
           <LookTopNav
             onBack={closeFocusToGrid}
@@ -851,6 +862,35 @@ export function Lookbook() {
           </div>
         </>
       )}
+
+      {/* Zoom cover: croix globale + blocage total des interactions */}
+      {focus.open && focus.phase === "open" && coverZoomGlobalOpen && (
+        <div
+          className="fixed inset-0 z-[2000] pointer-events-auto"
+          onPointerDown={(e) => e.preventDefault()}
+          onTouchMove={(e) => e.preventDefault()}
+        >
+          <button
+            type="button"
+            aria-label="Fermer"
+            className="absolute right-16 top-16 z-[2001] grid h-40 w-40 place-items-center"
+            onClick={() => {
+              setCoverZoomGlobalOpen(false);
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new Event("lookbook:coverZoomClose"));
+              }
+            }}
+          >
+            <Image
+              src={closeIcon}
+              alt="fermer"
+              width={16}
+              height={16}
+              className="brightness-0 invert"
+            />
+          </button>
+        </div>
+      )}
     </section>
   );
 }
@@ -862,6 +902,7 @@ function LookHorizontalCarousel({
   content,
   active,
   uiVisible,
+  onCoverZoomChange,
   onCoverReady,
 }: {
   lookKey: LookbookImageKey;
@@ -870,6 +911,7 @@ function LookHorizontalCarousel({
   content: LookContentItem[];
   active?: boolean;
   uiVisible?: boolean;
+  onCoverZoomChange?: (open: boolean) => void;
   onCoverReady?: () => void;
 }) {
   const localRef = useRef<HTMLDivElement | null>(null);
@@ -878,6 +920,7 @@ function LookHorizontalCarousel({
   const [coverZoomOpen, setCoverZoomOpen] = useState(false);
   const [coverZoomVisible, setCoverZoomVisible] = useState(false);
   const tapStart = useRef<{ x: number; y: number; t: number } | null>(null);
+  const tapMoved = useRef(false);
   const media = useMemo<LookContentItem[]>(() => {
     if (lookKey !== "001") return content;
     const i = content.findIndex((x) => x.type === "video");
@@ -899,6 +942,7 @@ function LookHorizontalCarousel({
     setSlideIdx(0);
     setCoverZoomOpen(false);
     setCoverZoomVisible(false);
+    onCoverZoomChange?.(false);
   }, [active]);
 
   useEffect(() => {
@@ -910,6 +954,15 @@ function LookHorizontalCarousel({
       el.style.pointerEvents = "";
     };
   }, [coverZoomOpen]);
+
+  useEffect(() => {
+    const onClose = () => {
+      setCoverZoomOpen(false);
+      onCoverZoomChange?.(false);
+    };
+    window.addEventListener("lookbook:coverZoomClose", onClose);
+    return () => window.removeEventListener("lookbook:coverZoomClose", onClose);
+  }, [onCoverZoomChange]);
 
   useEffect(() => {
     if (!coverZoomOpen) {
@@ -947,26 +1000,59 @@ function LookHorizontalCarousel({
               className={clsx(
                 "relative overflow-hidden will-change-transform",
                 "transition-transform duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
-                "scale-100",
+                coverZoomVisible ? "scale-110" : "scale-100",
               )}
               style={{
                 aspectRatio: "3 / 4",
                 height: "var(--vvh, 100vh)",
                 width: "calc(var(--vvh, 100vh) * 0.75)",
+                transformOrigin: "center",
               }}
               onPointerDown={(e) => {
-                // Tap/click uniquement: si ça bouge trop, on n'ouvre pas la modale.
+                tapMoved.current = false;
                 tapStart.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+              }}
+              onPointerMove={(e) => {
+                const start = tapStart.current;
+                if (!start) return;
+                const dx = Math.abs(e.clientX - start.x);
+                const dy = Math.abs(e.clientY - start.y);
+                if (dx > 10 || dy > 10) tapMoved.current = true;
               }}
               onPointerUp={(e) => {
                 const start = tapStart.current;
                 tapStart.current = null;
                 if (!start) return;
-                const dx = Math.abs(e.clientX - start.x);
-                const dy = Math.abs(e.clientY - start.y);
                 const dt = Date.now() - start.t;
-                if (dx > 10 || dy > 10 || dt > 350) return;
+                if (tapMoved.current || dt > 350) return;
                 setCoverZoomOpen(true);
+                onCoverZoomChange?.(true);
+              }}
+              onTouchStart={(e) => {
+                if (e.touches.length !== 1) return;
+                tapMoved.current = false;
+                tapStart.current = {
+                  x: e.touches[0].clientX,
+                  y: e.touches[0].clientY,
+                  t: Date.now(),
+                };
+              }}
+              onTouchMove={(e) => {
+                const start = tapStart.current;
+                if (!start) return;
+                if (e.touches.length !== 1) return;
+                const dx = Math.abs(e.touches[0].clientX - start.x);
+                const dy = Math.abs(e.touches[0].clientY - start.y);
+                if (dx > 10 || dy > 10) tapMoved.current = true;
+              }}
+              onTouchEnd={() => {
+                const start = tapStart.current;
+                tapStart.current = null;
+                if (!start) return;
+                const dt = Date.now() - start.t;
+                if (tapMoved.current || dt > 350) return;
+                setCoverZoomOpen(true);
+                onCoverZoomChange?.(true);
               }}
             >
               <Image
@@ -985,7 +1071,7 @@ function LookHorizontalCarousel({
               className={clsx(
                 "pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent",
                 "transition-opacity duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
-                uiVisible ? "opacity-100" : "opacity-0",
+                uiVisible && !coverZoomOpen ? "opacity-100" : "opacity-0",
               )}
             />
           </div>
@@ -1038,7 +1124,7 @@ function LookHorizontalCarousel({
         </div>
       </div>
 
-      {/* Modale zoom cover (bloque toute interaction derrière) */}
+      {/* Zoom cover (bloque toute interaction derrière, seule la croix est cliquable) */}
       {coverZoomOpen && (
         <div
           className={clsx(
@@ -1046,17 +1132,16 @@ function LookHorizontalCarousel({
             "transition-opacity duration-300 ease-[cubic-bezier(.22,1,.36,1)]",
             coverZoomVisible ? "opacity-100" : "opacity-0",
           )}
-          style={{ background: "rgba(0,0,0,0.82)" }}
-          onPointerDown={(e) => {
-            // Empêche le scroll/drag de passer au contenu derrière.
-            e.preventDefault();
-          }}
+          onPointerDown={(e) => e.preventDefault()}
         >
           <button
             type="button"
             aria-label="Fermer"
             className="absolute right-16 top-16 z-[1101] grid h-40 w-40 place-items-center"
-            onClick={() => setCoverZoomOpen(false)}
+            onClick={() => {
+              setCoverZoomOpen(false);
+              onCoverZoomChange?.(false);
+            }}
           >
             <Image
               src={closeIcon}
@@ -1066,31 +1151,6 @@ function LookHorizontalCarousel({
               className="brightness-0 invert"
             />
           </button>
-
-          <div className="absolute inset-0 flex items-center justify-center px-16">
-            <div className="relative overflow-hidden rounded-[2px]">
-              <div
-                className="relative overflow-hidden will-change-transform"
-                style={{
-                  aspectRatio: "3 / 4",
-                  height: "var(--vvh, 100vh)",
-                  width: "calc(var(--vvh, 100vh) * 0.75)",
-                  transform: coverZoomVisible ? "scale(1.06)" : "scale(1.0)",
-                  transition: "transform 500ms cubic-bezier(.22,1,.36,1)",
-                }}
-              >
-                <Image
-                  src={coverImg}
-                  alt={coverTitle}
-                  fill
-                  className="object-cover"
-                  sizes="100vw"
-                  priority
-                  quality={100}
-                />
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
@@ -1099,7 +1159,9 @@ function LookHorizontalCarousel({
         className={clsx(
           "pointer-events-none absolute bottom-60 left-0 right-0 z-10 flex justify-center",
           "transition-[opacity,transform] duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
-          uiVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3",
+          uiVisible && !coverZoomOpen
+            ? "opacity-100 translate-y-0"
+            : "opacity-0 translate-y-3",
         )}
       >
         <div className="flex items-center gap-6">
