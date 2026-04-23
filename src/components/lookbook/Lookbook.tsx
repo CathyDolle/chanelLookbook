@@ -44,10 +44,12 @@ export function Lookbook() {
   const [focus, setFocus] = useState<FocusState>({ open: false });
   const [topNavHidden, setTopNavHidden] = useState(false);
   const [activeLookIdx, setActiveLookIdx] = useState(0);
+  const activeLookIdxRef2 = useRef(0);
   const [fullUiVisible, setFullUiVisible] = useState(false);
   const [coverZoomGlobalOpen, setCoverZoomGlobalOpen] = useState(false);
   const coverZoomGlobalOpenRef = useRef(false);
   const globalClosePinch = useRef<{ startDist: number } | null>(null);
+  const focusClosePinch = useRef<{ startDist: number } | null>(null);
   const [activeCarouselSlideIdx, setActiveCarouselSlideIdx] = useState(0);
   const activeCarouselSlideIdxRef = useRef(0);
   const scrollRaf = useRef<number | null>(null);
@@ -177,8 +179,26 @@ export function Lookbook() {
   }, [focus.open]);
 
   useEffect(() => {
+    activeLookIdxRef2.current = activeLookIdx;
+  }, [activeLookIdx]);
+
+  useEffect(() => {
     coverZoomGlobalOpenRef.current = coverZoomGlobalOpen;
   }, [coverZoomGlobalOpen]);
+
+  const closeFocusToGridNow = () => {
+    if (!focusOpenRef.current) return;
+    // Cache la top-nav immédiatement au clic (avant l'anim)
+    setTopNavHidden(true);
+    setCoverZoomGlobalOpen(false);
+    setCoverTransition(null);
+    // Ferme depuis le look actuellement visible dans le feed
+    setFocus((prev) =>
+      prev.open
+        ? { ...prev, idx: activeLookIdxRef2.current, phase: "exiting" }
+        : prev,
+    );
+  };
 
   useEffect(() => {
     const gridEl = gridRef.current;
@@ -235,20 +255,28 @@ export function Lookbook() {
       // En vue full: pinch = zoom cover (slide 0) open/close.
       if (focusOpenRef.current) {
         const isOnCover = activeCarouselSlideIdxRef.current === 0;
-        if (!isOnCover) return;
-
-        if (!coverZoomGlobalOpenRef.current && e.deltaY < 0) {
-          setCoverZoomGlobalOpen(true);
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new Event("lookbook:coverZoomOpen"));
+        // Si le zoom cover est ouvert, pinch-in => ferme le zoom cover (comportement existant)
+        if (coverZoomGlobalOpenRef.current) {
+          if (e.deltaY > 0) {
+            setCoverZoomGlobalOpen(false);
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new Event("lookbook:coverZoomClose"));
+            }
           }
           return;
         }
 
-        if (coverZoomGlobalOpenRef.current && e.deltaY > 0) {
-          setCoverZoomGlobalOpen(false);
+        // Sinon, pinch-in => retourne à la grille (comme "back"), sur n'importe quel slide.
+        if (e.deltaY > 0) {
+          closeFocusToGridNow();
+          return;
+        }
+
+        // Pinch-out => ouvre le zoom cover uniquement si on est sur la cover (slide 0).
+        if (isOnCover && e.deltaY < 0) {
+          setCoverZoomGlobalOpen(true);
           if (typeof window !== "undefined") {
-            window.dispatchEvent(new Event("lookbook:coverZoomClose"));
+            window.dispatchEvent(new Event("lookbook:coverZoomOpen"));
           }
           return;
         }
@@ -691,6 +719,33 @@ export function Lookbook() {
               backgroundColor: isFeedMode ? "#000" : "#fff",
             }}
             onScroll={isFeedMode ? onFeedScroll : undefined}
+            onTouchStartCapture={(e) => {
+              // En vue full: pinch inverse => retourne à la grille (comme "back").
+              if (!focusOpenRef.current) return;
+              if (coverZoomGlobalOpenRef.current) return;
+              if (e.touches.length !== 2) return;
+              focusClosePinch.current = {
+                startDist: getTouchDist(e.touches[0], e.touches[1]),
+              };
+            }}
+            onTouchEndCapture={() => {
+              focusClosePinch.current = null;
+            }}
+            onTouchCancelCapture={() => {
+              focusClosePinch.current = null;
+            }}
+            onTouchMoveCapture={(e) => {
+              if (!focusClosePinch.current) return;
+              if (e.touches.length !== 2) return;
+              e.preventDefault();
+              const dist = getTouchDist(e.touches[0], e.touches[1]);
+              const ratio = dist / (focusClosePinch.current.startDist || 1);
+              // Seuil volontairement un peu ferme: on ferme seulement sur un vrai pinch-in.
+              if (ratio < 0.92) {
+                focusClosePinch.current = null;
+                closeFocusToGridNow();
+              }
+            }}
           >
             {lookbook.map((item, idx) => (
               <div
