@@ -6,6 +6,7 @@ import type { LookContentItem } from "./lookContent";
 import clsx from "clsx";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNextFrame } from "@/hooks";
 
 import { getTouchDist } from "./lookbookUtils";
 
@@ -94,12 +95,11 @@ export function LookHorizontalCarousel({
   }, [onCoverZoomChange]);
 
   useEffect(() => {
-    if (!coverZoomOpen) {
-      setCoverZoomVisible(false);
-      return;
-    }
-    const id = requestAnimationFrame(() => setCoverZoomVisible(true));
-    return () => cancelAnimationFrame(id);
+    if (!coverZoomOpen) setCoverZoomVisible(false);
+  }, [coverZoomOpen]);
+
+  useNextFrame(() => {
+    if (coverZoomOpen) setCoverZoomVisible(true);
   }, [coverZoomOpen]);
 
   return (

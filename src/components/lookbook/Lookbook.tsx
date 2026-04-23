@@ -10,6 +10,7 @@ import clsx from "clsx";
 import Image from "next/image";
 import closeIcon from "@/assets/svgs/close.svg";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useNextFrame } from "@/hooks";
 
 import {
   clamp,
@@ -411,9 +412,11 @@ export function Lookbook() {
       setFullUiVisible(false);
       return;
     }
-    const id = requestAnimationFrame(() => setFullUiVisible(true));
-    return () => cancelAnimationFrame(id);
   }, [focus]);
+
+  useNextFrame(() => {
+    if (focus.open && focus.phase === "open") setFullUiVisible(true);
+  }, [focus.open, focusPhase]);
 
   useLayoutEffect(() => {
     if (!focus.open) return;

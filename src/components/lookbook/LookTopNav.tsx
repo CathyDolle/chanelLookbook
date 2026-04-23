@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import clsx from "clsx";
 import Image from "next/image";
 import arrow from "@/assets/svgs/arrow.svg";
 import star from "@/assets/svgs/star.svg";
+import { useNextFrame } from "@/hooks";
 
 export function LookTopNav({
   onBack,
@@ -15,10 +16,7 @@ export function LookTopNav({
 }) {
   const [isMounted, setIsMounted] = useState(false);
 
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setIsMounted(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
+  useNextFrame(() => setIsMounted(true), []);
 
   const appear = useMemo(
     () =>
