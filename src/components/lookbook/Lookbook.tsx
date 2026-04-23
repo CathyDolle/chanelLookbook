@@ -59,7 +59,9 @@ export function Lookbook() {
     top: number;
     width: number;
     height: number;
-    cardRect: { left: number; top: number; width: number; height: number };
+    // Snapshot des placements en mode grille (avant passage en full).
+    // Sert de cible fiable pour l'anim de fermeture, même après navigation verticale en full.
+    cardRects: Array<{ left: number; top: number; width: number; height: number } | null>;
   } | null>(null);
   const lastDesktopGestureAt = useRef<number>(0);
   const focusOpenRef = useRef(false);
@@ -552,12 +554,11 @@ export function Lookbook() {
       top: gridR.top,
       width: gridR.width,
       height: gridR.height,
-      cardRect: {
-        left: cardR.left,
-        top: cardR.top,
-        width: cardR.width,
-        height: cardR.height,
-      },
+      cardRects: cardRefs.current.map((node) => {
+        if (!node) return null;
+        const r = node.getBoundingClientRect();
+        return { left: r.left, top: r.top, width: r.width, height: r.height };
+      }),
     };
 
     // Passer la grille en fixed pour qu'elle puisse passer au-dessus du header pendant l'anim.
@@ -595,10 +596,9 @@ export function Lookbook() {
     const lookKey = lookbook[idx]?.src as LookbookImageKey;
     const title = lookbook[idx]?.title ?? "";
     const st = gridAnim.current;
-    const cardR =
-      st?.cardRect ??
-      cardRefs.current[idx]?.getBoundingClientRect?.() ??
-      null;
+    const snap = st?.cardRects?.[idx] ?? null;
+    const live = cardRefs.current[idx]?.getBoundingClientRect?.() ?? null;
+    const cardR = snap ?? live;
     if (!cardR) return;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
