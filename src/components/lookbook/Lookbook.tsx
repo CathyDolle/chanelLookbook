@@ -999,14 +999,14 @@ function LookHorizontalCarousel({
             <div
               className={clsx(
                 "relative overflow-hidden will-change-transform",
-                "transition-transform duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
-                coverZoomVisible ? "scale-110" : "scale-100",
+                "transition-transform duration-[1800ms] ease-[cubic-bezier(.16,1,.3,1)]",
+                coverZoomVisible ? "scale-[1.4]" : "scale-100",
               )}
               style={{
                 aspectRatio: "3 / 4",
                 height: "var(--vvh, 100vh)",
                 width: "calc(var(--vvh, 100vh) * 0.75)",
-                transformOrigin: "center",
+                transformOrigin: "top",
               }}
               onPointerDown={(e) => {
                 tapMoved.current = false;
