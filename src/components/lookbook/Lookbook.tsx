@@ -86,6 +86,14 @@ export function Lookbook() {
   });
 
   const isFeedMode = focus.open && focus.phase === "open";
+  const focusPhase = focus.open ? focus.phase : null;
+
+  const resetPinchState = () => {
+    pinch.current.startDist = 0;
+    pinch.current.targetIdx = null;
+    focusClosePinch.current = null;
+    globalClosePinch.current = null;
+  };
 
   const clampStep = (idx: number) =>
     Math.max(0, Math.min(spanSteps.length - 1, idx));
@@ -161,6 +169,25 @@ export function Lookbook() {
   }, []);
 
   useEffect(() => {
+    // Précharge léger pour éviter le "premier close" qui arrive avant les thumbs.
+    // On limite volontairement pour ne pas saturer le réseau.
+    if (typeof window === "undefined") return;
+    const keys = Object.keys(lookbookImages).slice(0, 12) as LookbookImageKey[];
+    const preload = () => {
+      for (const k of keys) {
+        const src = (lookbookImages[k] as any)?.src;
+        if (!src) continue;
+        const img = new window.Image();
+        img.decoding = "async";
+        img.src = src;
+      }
+    };
+    const ric = (window as any).requestIdleCallback as undefined | ((cb: () => void) => number);
+    if (ric) ric(preload);
+    else setTimeout(preload, 250);
+  }, []);
+
+  useEffect(() => {
     focusOpenRef.current = focus.open;
   }, [focus.open]);
 
@@ -177,6 +204,14 @@ export function Lookbook() {
     // Cache la top-nav immédiatement au clic (avant l'anim)
     setTopNavHidden(true);
     setCoverZoomGlobalOpen(false);
+    resetPinchState();
+    // Important: rendre la grille visible immédiatement (pas 1 frame après),
+    // sinon l'overlay "retombe" sur un fond vide au premier close.
+    const gridEl = gridRef.current;
+    if (gridEl) {
+      gridEl.style.opacity = "1";
+      gridEl.style.pointerEvents = "none";
+    }
     startExitCoverTransition(activeLookIdxRef.current);
     // Ferme depuis le look actuellement visible dans le feed
     setFocus((prev) =>
@@ -186,11 +221,11 @@ export function Lookbook() {
     );
   };
 
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     const gridEl = gridRef.current;
     if (!gridEl) return;
-    const focusPhase = focus.open ? focus.phase : null;
-    const isAnimatingFocus = focus.open && focus.phase !== "open";
+    const isAnimatingFocus = focus.open && focusPhase !== "open";
     const isAnimatingCover = !!coverTransition && coverTransition.phase !== "final";
     const lockInteractions = coverZoomGlobalOpen || isAnimatingFocus || isAnimatingCover;
 
@@ -210,7 +245,8 @@ export function Lookbook() {
       (gridEl.style as any).msOverflowStyle = "";
       document.documentElement.style.overflowY = "";
     }
-  }, [coverZoomGlobalOpen, coverTransition, focus.open, focus.open ? focus.phase : null]);
+  }, [coverZoomGlobalOpen, coverTransition, focus.open, focusPhase]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   useEffect(() => {
     activeCarouselSlideIdxRef.current = activeCarouselSlideIdx;
@@ -443,6 +479,7 @@ export function Lookbook() {
           // Fin de l'anim inverse: restore la grille en flow et ferme.
           gridEl.style.cssText = st.backupCssText;
           gridAnim.current = null;
+          resetPinchState();
           return { open: false };
         }
 
@@ -625,6 +662,12 @@ export function Lookbook() {
     // Cache la top-nav immédiatement au clic (avant l'anim)
     setTopNavHidden(true);
     setCoverZoomGlobalOpen(false);
+    resetPinchState();
+    const gridEl = gridRef.current;
+    if (gridEl) {
+      gridEl.style.opacity = "1";
+      gridEl.style.pointerEvents = "none";
+    }
     startExitCoverTransition(activeLookIdx);
     // Ferme depuis le look actuellement visible dans le feed
     setFocus((prev) =>
@@ -795,6 +838,7 @@ export function Lookbook() {
                 onTouchStart={(e) => {
                   // En vue full, on ne pinch pas pour zoomer/dézoomer la grille.
                   if (focus.open) return;
+                  if (coverTransition) return;
                   if (e.touches.length !== 2) return;
                   const midX =
                     (e.touches[0].clientX + e.touches[1].clientX) / 2;
@@ -823,6 +867,7 @@ export function Lookbook() {
                 onTouchMove={(e) => {
                   // En vue full, on ne pinch pas pour zoomer/dézoomer la grille.
                   if (focus.open) return;
+                  if (coverTransition) return;
                   if (e.touches.length !== 2) return;
                   e.preventDefault();
 
