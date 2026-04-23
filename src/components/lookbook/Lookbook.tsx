@@ -189,7 +189,12 @@ export function Lookbook() {
   useEffect(() => {
     const gridEl = gridRef.current;
     if (!gridEl) return;
-    if (coverZoomGlobalOpen) {
+    const focusPhase = focus.open ? focus.phase : null;
+    const isAnimatingFocus = focus.open && focus.phase !== "open";
+    const isAnimatingCover = !!coverTransition && coverTransition.phase !== "final";
+    const lockInteractions = coverZoomGlobalOpen || isAnimatingFocus || isAnimatingCover;
+
+    if (lockInteractions) {
       // Quand la cover est zoomée: aucune interaction/scroll sur le feed.
       gridEl.style.pointerEvents = "none";
       gridEl.style.overflowY = "hidden";
@@ -205,7 +210,7 @@ export function Lookbook() {
       (gridEl.style as any).msOverflowStyle = "";
       document.documentElement.style.overflowY = "";
     }
-  }, [coverZoomGlobalOpen]);
+  }, [coverZoomGlobalOpen, coverTransition, focus.open, focus.open ? focus.phase : null]);
 
   useEffect(() => {
     activeCarouselSlideIdxRef.current = activeCarouselSlideIdx;
