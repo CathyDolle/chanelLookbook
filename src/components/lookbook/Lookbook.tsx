@@ -43,6 +43,7 @@ export function Lookbook() {
   const [focus, setFocus] = useState<FocusState>({ open: false });
   const [topNavHidden, setTopNavHidden] = useState(false);
   const [activeLookIdx, setActiveLookIdx] = useState(0);
+  const [fullUiVisible, setFullUiVisible] = useState(false);
   const scrollRaf = useRef<number | null>(null);
   const scrollYAtOpenRef = useRef<number>(0);
   const [coverReadyIdx, setCoverReadyIdx] = useState<number | null>(null);
@@ -271,6 +272,19 @@ export function Lookbook() {
       document.body.style.overflow = prev;
     };
   }, [focus.open]);
+
+  useEffect(() => {
+    if (!focus.open) {
+      setFullUiVisible(false);
+      return;
+    }
+    if (focus.phase !== "open") {
+      setFullUiVisible(false);
+      return;
+    }
+    const id = requestAnimationFrame(() => setFullUiVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, [focus]);
 
   useLayoutEffect(() => {
     if (!focus.open) return;
@@ -711,6 +725,7 @@ export function Lookbook() {
                     active={
                       focus.open && focus.idx === idx && focus.phase === "open"
                     }
+                    uiVisible={fullUiVisible}
                     onCoverReady={() => {
                       if (idx === focus.idx) setCoverReadyIdx(idx);
                     }}
@@ -805,7 +820,13 @@ export function Lookbook() {
           />
 
           {/* Titre séparé, au-dessus du stepper */}
-          <div className="pointer-events-none fixed left-0 right-0 bottom-[120px] z-[1002] flex justify-center">
+          <div
+            className={clsx(
+              "pointer-events-none fixed left-0 right-0 bottom-[120px] z-[1002] flex justify-center",
+              "transition-[opacity,transform] duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
+              fullUiVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3",
+            )}
+          >
             <div className="text-[11px] font-serif tracking-wide text-white">
               {formatLookTitle(activeLookIdx)}
             </div>
@@ -822,6 +843,7 @@ function LookHorizontalCarousel({
   coverImg,
   content,
   active,
+  uiVisible,
   onCoverReady,
 }: {
   lookKey: LookbookImageKey;
@@ -829,6 +851,7 @@ function LookHorizontalCarousel({
   coverImg: any;
   content: LookContentItem[];
   active?: boolean;
+  uiVisible?: boolean;
   onCoverReady?: () => void;
 }) {
   const localRef = useRef<HTMLDivElement | null>(null);
@@ -899,7 +922,11 @@ function LookHorizontalCarousel({
             </div>
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent"
+              className={clsx(
+                "pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent",
+                "transition-opacity duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
+                uiVisible ? "opacity-100" : "opacity-0",
+              )}
             />
           </div>
 
@@ -911,15 +938,22 @@ function LookHorizontalCarousel({
                 key={`${lookKey}-media-0`}
                 item={media[0]!}
                 coverTitle={coverTitle}
+                uiVisible={uiVisible}
               />
               {/* 3e slide: details */}
-              <DetailsSlide key={`${lookKey}-details`} title={coverTitle} lookKey={lookKey} />
+              <DetailsSlide
+                key={`${lookKey}-details`}
+                title={coverTitle}
+                lookKey={lookKey}
+                uiVisible={uiVisible}
+              />
               {/* reste du media */}
               {media.slice(1).map((it, i) => (
                 <MediaSlide
                   key={`${lookKey}-media-${i + 1}-${it.type}`}
                   item={it}
                   coverTitle={coverTitle}
+                  uiVisible={uiVisible}
                 />
               ))}
             </>
@@ -930,16 +964,28 @@ function LookHorizontalCarousel({
                   key={`${lookKey}-media-${i}-${it.type}`}
                   item={it}
                   coverTitle={coverTitle}
+                  uiVisible={uiVisible}
                 />
               ))}
-              <DetailsSlide key={`${lookKey}-details`} title={coverTitle} lookKey={lookKey} />
+              <DetailsSlide
+                key={`${lookKey}-details`}
+                title={coverTitle}
+                lookKey={lookKey}
+                uiVisible={uiVisible}
+              />
             </>
           )) as any}
         </div>
       </div>
 
       {/* Stepper */}
-      <div className="pointer-events-none absolute bottom-60 left-0 right-0 z-10 flex justify-center">
+      <div
+        className={clsx(
+          "pointer-events-none absolute bottom-60 left-0 right-0 z-10 flex justify-center",
+          "transition-[opacity,transform] duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
+          uiVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3",
+        )}
+      >
         <div className="flex items-center gap-6">
           {Array.from({ length: Math.max(1, slideCount) }).map((_, i) => (
             <div
@@ -956,7 +1002,15 @@ function LookHorizontalCarousel({
   );
 }
 
-function MediaSlide({ item, coverTitle }: { item: LookContentItem; coverTitle: string }) {
+function MediaSlide({
+  item,
+  coverTitle,
+  uiVisible,
+}: {
+  item: LookContentItem;
+  coverTitle: string;
+  uiVisible?: boolean;
+}) {
   return (
     <div className="relative h-[var(--vvh,100vh)] w-[100vw] overflow-hidden bg-black [scroll-snap-align:start]">
       {item.type === "image" ? (
@@ -974,13 +1028,25 @@ function MediaSlide({ item, coverTitle }: { item: LookContentItem; coverTitle: s
       )}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent"
+        className={clsx(
+          "pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent",
+          "transition-opacity duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
+          uiVisible ? "opacity-100" : "opacity-0",
+        )}
       />
     </div>
   );
 }
 
-function DetailsSlide({ title, lookKey }: { title: string; lookKey: LookbookImageKey }) {
+function DetailsSlide({
+  title,
+  lookKey,
+  uiVisible,
+}: {
+  title: string;
+  lookKey: LookbookImageKey;
+  uiVisible?: boolean;
+}) {
   return (
     <section className="relative flex h-full w-[100vw] items-center justify-center bg-black px-26 text-center text-white [scroll-snap-align:start]">
       <div>
@@ -992,7 +1058,11 @@ function DetailsSlide({ title, lookKey }: { title: string; lookKey: LookbookImag
       </div>
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent"
+        className={clsx(
+          "pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent",
+          "transition-opacity duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
+          uiVisible ? "opacity-100" : "opacity-0",
+        )}
       />
     </section>
   );
