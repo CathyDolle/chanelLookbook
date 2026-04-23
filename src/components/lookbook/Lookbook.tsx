@@ -47,6 +47,7 @@ export function Lookbook() {
   const [fullUiVisible, setFullUiVisible] = useState(false);
   const [coverZoomGlobalOpen, setCoverZoomGlobalOpen] = useState(false);
   const coverZoomGlobalOpenRef = useRef(false);
+  const globalClosePinch = useRef<{ startDist: number } | null>(null);
   const [activeCarouselSlideIdx, setActiveCarouselSlideIdx] = useState(0);
   const activeCarouselSlideIdxRef = useRef(0);
   const scrollRaf = useRef<number | null>(null);
@@ -177,6 +178,27 @@ export function Lookbook() {
 
   useEffect(() => {
     coverZoomGlobalOpenRef.current = coverZoomGlobalOpen;
+  }, [coverZoomGlobalOpen]);
+
+  useEffect(() => {
+    const gridEl = gridRef.current;
+    if (!gridEl) return;
+    if (coverZoomGlobalOpen) {
+      // Quand la cover est zoomée: aucune interaction/scroll sur le feed.
+      gridEl.style.pointerEvents = "none";
+      gridEl.style.overflowY = "hidden";
+      gridEl.style.scrollbarWidth = "none";
+      (gridEl.style as any).msOverflowStyle = "none";
+
+      // Et on verrouille aussi le scroll root pour éviter une scrollbar à droite.
+      document.documentElement.style.overflowY = "hidden";
+    } else {
+      gridEl.style.pointerEvents = "";
+      gridEl.style.overflowY = "";
+      gridEl.style.scrollbarWidth = "";
+      (gridEl.style as any).msOverflowStyle = "";
+      document.documentElement.style.overflowY = "";
+    }
   }, [coverZoomGlobalOpen]);
 
   useEffect(() => {
@@ -420,7 +442,9 @@ export function Lookbook() {
     // Remet la grille "au-dessus" avant l'anim inverse
     gridEl.style.opacity = "1";
     gridEl.style.pointerEvents = "auto";
-    // On garde le fond d'origine de la grille pour ne pas masquer l'anim.
+    // Évite un flash: on garde un fond transparent pendant l'exit,
+    // puis `backupCssText` est restauré en fin de transition.
+    gridEl.style.background = "transparent";
 
     // Recrée le transformOpen pour le look actif en layout grille (flex-wrap).
     gridEl.style.transition = "none";
@@ -528,7 +552,7 @@ export function Lookbook() {
     gridEl.style.transition = isReducedMotion()
       ? "none"
       : `transform ${FOCUS_ZOOM_MS}ms ${FOCUS_ZOOM_EASE}`;
-    gridEl.style.background = "#fff";
+    gridEl.style.background = "transparent";
     gridEl.style.opacity = "1";
     gridEl.style.pointerEvents = "auto";
 
@@ -904,6 +928,39 @@ export function Lookbook() {
           className="fixed inset-0 z-[2000] pointer-events-auto"
           onPointerDown={(e) => e.preventDefault()}
           onTouchMove={(e) => e.preventDefault()}
+          onTouchStart={(e) => {
+            if (e.touches.length !== 2) return;
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            const dx = t1.clientX - t2.clientX;
+            const dy = t1.clientY - t2.clientY;
+            globalClosePinch.current = { startDist: Math.hypot(dx, dy) };
+          }}
+          onTouchEnd={() => {
+            globalClosePinch.current = null;
+          }}
+          onTouchCancel={() => {
+            globalClosePinch.current = null;
+          }}
+          onTouchMoveCapture={(e) => {
+            // Pinch inverse sur mobile pour fermer (même comportement que desktop pad).
+            if (!globalClosePinch.current) return;
+            if (e.touches.length !== 2) return;
+            e.preventDefault();
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            const dx = t1.clientX - t2.clientX;
+            const dy = t1.clientY - t2.clientY;
+            const dist = Math.hypot(dx, dy);
+            const ratio = dist / (globalClosePinch.current.startDist || 1);
+            if (ratio < 0.92) {
+              globalClosePinch.current = null;
+              setCoverZoomGlobalOpen(false);
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new Event("lookbook:coverZoomClose"));
+              }
+            }
+          }}
         >
           <button
             type="button"
@@ -1216,35 +1273,7 @@ function LookHorizontalCarousel({
         </div>
       </div>
 
-      {/* Zoom cover (bloque toute interaction derrière, seule la croix est cliquable) */}
-      {coverZoomOpen && (
-        <div
-          className={clsx(
-            "fixed inset-0 z-[1100]",
-            "transition-opacity duration-300 ease-[cubic-bezier(.22,1,.36,1)]",
-            coverZoomVisible ? "opacity-100" : "opacity-0",
-          )}
-          onPointerDown={(e) => e.preventDefault()}
-        >
-          <button
-            type="button"
-            aria-label="Fermer"
-            className="absolute right-16 top-16 z-[1101] grid h-40 w-40 place-items-center"
-            onClick={() => {
-              setCoverZoomOpen(false);
-              onCoverZoomChange?.(false);
-            }}
-          >
-            <Image
-              src={closeIcon}
-              alt="fermer"
-              width={16}
-              height={16}
-              className="brightness-0 invert"
-            />
-          </button>
-        </div>
-      )}
+      {/* Zoom cover: overlay local supprimé (croix = overlay global) */}
 
       {/* Stepper */}
       <div
