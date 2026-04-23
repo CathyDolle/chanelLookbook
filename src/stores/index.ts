@@ -1,1 +1,1 @@
-export * from './useScrollStore'
+export * from "./useScrollStore";
