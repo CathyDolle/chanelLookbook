@@ -826,7 +826,18 @@ function LookHorizontalCarousel({
   const localRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const [slideIdx, setSlideIdx] = useState(0);
-  const slideCount = 1 + content.length;
+  const media = useMemo<LookContentItem[]>(() => {
+    if (lookKey !== "001") return content;
+    const i = content.findIndex((x) => x.type === "video");
+    if (i <= 0) return content;
+    const next = content.slice();
+    const [vid] = next.splice(i, 1);
+    next.unshift(vid);
+    return next;
+  }, [content, lookKey]);
+
+  // Slides: cover + media + details
+  const slideCount = 2 + media.length;
 
   useEffect(() => {
     if (!active) return;
@@ -884,50 +895,38 @@ function LookHorizontalCarousel({
             />
           </div>
 
-          {/* Slides suivants: contenu (plein écran) */}
-          {content.length ? (
-            content.map((it, i) => (
-              <div
-                key={`${lookKey}-${it.type}-${i}`}
-                className="relative h-[var(--vvh,100vh)] w-[100vw] overflow-hidden bg-black [scroll-snap-align:start]"
-              >
-                {it.type === "image" ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={it.src}
-                    alt={coverTitle}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <video
-                    className="h-full w-full object-cover"
-                    src={it.src}
-                    playsInline
-                    muted
-                    autoPlay
-                    loop
-                  />
-                )}
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent"
-                />
-              </div>
-            ))
-          ) : (
-            <div className="relative flex h-full w-[100vw] items-center justify-center bg-black px-24 text-center text-white [scroll-snap-align:start]">
-              <div>
-                <div className="text-14 opacity-80">{coverTitle}</div>
-                <div className="mt-8 text-12 opacity-60">
-                  Contenu à venir pour {lookKey}.
-                </div>
-              </div>
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent"
+          {/* Slides suivants: media + details */}
+          {(lookKey === "001" && media.length ? (
+            <>
+              {/* 2e slide: video (ou 1er media) */}
+              <MediaSlide
+                key={`${lookKey}-media-0`}
+                item={media[0]!}
+                coverTitle={coverTitle}
               />
-            </div>
-          )}
+              {/* 3e slide: details */}
+              <DetailsSlide key={`${lookKey}-details`} title={coverTitle} lookKey={lookKey} />
+              {/* reste du media */}
+              {media.slice(1).map((it, i) => (
+                <MediaSlide
+                  key={`${lookKey}-media-${i + 1}-${it.type}`}
+                  item={it}
+                  coverTitle={coverTitle}
+                />
+              ))}
+            </>
+          ) : (
+            <>
+              {media.map((it, i) => (
+                <MediaSlide
+                  key={`${lookKey}-media-${i}-${it.type}`}
+                  item={it}
+                  coverTitle={coverTitle}
+                />
+              ))}
+              <DetailsSlide key={`${lookKey}-details`} title={coverTitle} lookKey={lookKey} />
+            </>
+          )) as any}
         </div>
       </div>
 
@@ -946,5 +945,47 @@ function LookHorizontalCarousel({
         </div>
       </div>
     </div>
+  );
+}
+
+function MediaSlide({ item, coverTitle }: { item: LookContentItem; coverTitle: string }) {
+  return (
+    <div className="relative h-[var(--vvh,100vh)] w-[100vw] overflow-hidden bg-black [scroll-snap-align:start]">
+      {item.type === "image" ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={item.src} alt={coverTitle} className="h-full w-full object-cover" />
+      ) : (
+        <video
+          className="h-full w-full object-cover"
+          src={item.src}
+          playsInline
+          muted
+          autoPlay
+          loop
+        />
+      )}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent"
+      />
+    </div>
+  );
+}
+
+function DetailsSlide({ title, lookKey }: { title: string; lookKey: LookbookImageKey }) {
+  return (
+    <section className="relative flex h-full w-[100vw] items-center justify-center bg-black px-26 text-center text-white [scroll-snap-align:start]">
+      <div>
+        <div className="text-14 font-serif tracking-wide">{title}</div>
+        <div className="mt-13 max-w-[42ch] text-12 leading-[125%]">
+          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt
+          ut labore et dolore magna aliqua.
+        </div>
+      </div>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent"
+      />
+    </section>
   );
 }
