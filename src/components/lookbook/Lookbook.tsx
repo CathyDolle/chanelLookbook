@@ -599,7 +599,7 @@ export function Lookbook() {
             className={clsx(
               "absolute left-0 top-0 z-50 flex w-full",
               isFeedMode
-                ? "flex-col overflow-y-scroll overscroll-contain [scroll-snap-type:y_mandatory] bg-black"
+                ? "flex-col overflow-y-scroll overscroll-contain [scroll-snap-type:y_mandatory] bg-black no-scrollbar"
                 : "flex-wrap gutter-gap",
               isFeedMode && "touch-pan-y",
             )}
@@ -840,7 +840,7 @@ function LookHorizontalCarousel({
     <div className="relative h-full w-full">
       <div
         ref={localRef}
-        className="h-full w-full touch-pan-x touch-pan-y overflow-x-scroll overscroll-x-contain [scroll-snap-type:x_mandatory]"
+        className="h-full w-full touch-pan-x touch-pan-y overflow-x-scroll overscroll-x-contain [scroll-snap-type:x_mandatory] no-scrollbar"
         style={{ scrollBehavior: "auto" }}
         onScroll={() => {
           const el = localRef.current;
@@ -919,24 +919,20 @@ function LookHorizontalCarousel({
         </div>
       </div>
 
-      {/* Stepper au-dessus */}
-      {slideCount > 1 && (
-        <div className="pointer-events-none absolute bottom-16 left-0 right-0 z-10 flex justify-center">
-          <div className="flex items-center gap-6 rounded-full bg-black/40 px-10 py-6 backdrop-blur">
-            {Array.from({ length: slideCount }).map((_, i) => (
-              <div
-                key={`${lookKey}-dot-${i}`}
-                className={clsx(
-                  "h-6 w-6 rounded-full transition-opacity",
-                  i === slideIdx
-                    ? "bg-white opacity-100"
-                    : "bg-white opacity-40",
-                )}
-              />
-            ))}
-          </div>
+      {/* Stepper */}
+      <div className="pointer-events-none absolute bottom-60 left-0 right-0 z-10 flex justify-center">
+        <div className="flex items-center gap-6">
+          {Array.from({ length: Math.max(1, slideCount) }).map((_, i) => (
+            <div
+              key={`${lookKey}-sq-${i}`}
+              className={clsx(
+                "h-4 w-4 bg-white transition-opacity",
+                i === slideIdx ? "opacity-100" : "opacity-40",
+              )}
+            />
+          ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }
