@@ -7,6 +7,7 @@ import { lookContentByLook, type LookContentItem } from "./lookContent";
 import { LookTopNav } from "./LookTopNav";
 import clsx from "clsx";
 import Image from "next/image";
+import closeIcon from "@/assets/svgs/close.svg";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 type FocusState =
@@ -58,6 +59,7 @@ export function Lookbook() {
     height: number;
   } | null>(null);
   const lastDesktopGestureAt = useRef<number>(0);
+  const focusOpenRef = useRef(false);
   const pendingFocus = useRef<{
     idx: number;
     desiredViewportY: number;
@@ -166,9 +168,15 @@ export function Lookbook() {
   }, []);
 
   useEffect(() => {
+    focusOpenRef.current = focus.open;
+  }, [focus.open]);
+
+  useEffect(() => {
     // Bloque le zoom navigateur (Ctrl/Cmd +/-/0 et Ctrl/Cmd+wheel/pinch trackpad)
     // pour réutiliser ces gestes pour la resize des cartes.
     const onKeyDown = (e: KeyboardEvent) => {
+      // En vue full, pas de zoom/dezoom du "canvas" via raccourcis.
+      if (focusOpenRef.current) return;
       const key = e.key;
       const isZoomShortcut =
         (e.ctrlKey || e.metaKey) &&
@@ -184,6 +192,8 @@ export function Lookbook() {
     const onWheel = (e: WheelEvent) => {
       // Sur mac trackpad: pinch => wheel avec ctrlKey=true.
       if (!(e.ctrlKey || e.metaKey)) return;
+      // En vue full, pas de zoom/dezoom du "canvas" via pinch trackpad.
+      if (focusOpenRef.current) return;
       e.preventDefault();
 
       const now = Date.now();
@@ -642,8 +652,14 @@ export function Lookbook() {
                   width: isFeedMode ? "100%" : cardBasis,
                   height: isFeedMode ? "var(--vvh, 100vh)" : undefined,
                 }}
-                onClick={() => openFocusFromGrid(idx)}
+                onClick={() => {
+                  // En vue full (feed), on ne doit plus pouvoir "recliquer" pour ouvrir un autre look.
+                  if (focus.open) return;
+                  openFocusFromGrid(idx);
+                }}
                 onTouchStart={(e) => {
+                  // En vue full, on ne pinch pas pour zoomer/dézoomer la grille.
+                  if (focus.open) return;
                   if (e.touches.length !== 2) return;
                   const midX =
                     (e.touches[0].clientX + e.touches[1].clientX) / 2;
@@ -670,6 +686,8 @@ export function Lookbook() {
                   pinch.current.lastActionAt = Date.now();
                 }}
                 onTouchMove={(e) => {
+                  // En vue full, on ne pinch pas pour zoomer/dézoomer la grille.
+                  if (focus.open) return;
                   if (e.touches.length !== 2) return;
                   e.preventDefault();
 
@@ -857,6 +875,9 @@ function LookHorizontalCarousel({
   const localRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const [slideIdx, setSlideIdx] = useState(0);
+  const [coverZoomOpen, setCoverZoomOpen] = useState(false);
+  const [coverZoomVisible, setCoverZoomVisible] = useState(false);
+  const tapStart = useRef<{ x: number; y: number; t: number } | null>(null);
   const media = useMemo<LookContentItem[]>(() => {
     if (lookKey !== "001") return content;
     const i = content.findIndex((x) => x.type === "video");
@@ -876,7 +897,28 @@ function LookHorizontalCarousel({
     if (!el) return;
     el.scrollTo({ left: 0, top: 0, behavior: "auto" });
     setSlideIdx(0);
+    setCoverZoomOpen(false);
+    setCoverZoomVisible(false);
   }, [active]);
+
+  useEffect(() => {
+    const el = localRef.current;
+    if (!el) return;
+    // Quand la modale est ouverte, on bloque le carousel derrière (sinon swipe/scroll "part en vrille").
+    el.style.pointerEvents = coverZoomOpen ? "none" : "";
+    return () => {
+      el.style.pointerEvents = "";
+    };
+  }, [coverZoomOpen]);
+
+  useEffect(() => {
+    if (!coverZoomOpen) {
+      setCoverZoomVisible(false);
+      return;
+    }
+    const id = requestAnimationFrame(() => setCoverZoomVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, [coverZoomOpen]);
 
   return (
     <div className="relative h-full w-full">
@@ -902,11 +944,29 @@ function LookHorizontalCarousel({
           {/* Slide 0: cover (retour au feed en swipant back ici) */}
           <div className="relative flex h-full w-[100vw] items-center justify-center overflow-hidden bg-black [scroll-snap-align:start]">
             <div
-              className="relative overflow-hidden"
+              className={clsx(
+                "relative overflow-hidden will-change-transform",
+                "transition-transform duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
+                "scale-100",
+              )}
               style={{
                 aspectRatio: "3 / 4",
                 height: "var(--vvh, 100vh)",
                 width: "calc(var(--vvh, 100vh) * 0.75)",
+              }}
+              onPointerDown={(e) => {
+                // Tap/click uniquement: si ça bouge trop, on n'ouvre pas la modale.
+                tapStart.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+              }}
+              onPointerUp={(e) => {
+                const start = tapStart.current;
+                tapStart.current = null;
+                if (!start) return;
+                const dx = Math.abs(e.clientX - start.x);
+                const dy = Math.abs(e.clientY - start.y);
+                const dt = Date.now() - start.t;
+                if (dx > 10 || dy > 10 || dt > 350) return;
+                setCoverZoomOpen(true);
               }}
             >
               <Image
@@ -977,6 +1037,62 @@ function LookHorizontalCarousel({
           )) as any}
         </div>
       </div>
+
+      {/* Modale zoom cover (bloque toute interaction derrière) */}
+      {coverZoomOpen && (
+        <div
+          className={clsx(
+            "fixed inset-0 z-[1100]",
+            "transition-opacity duration-300 ease-[cubic-bezier(.22,1,.36,1)]",
+            coverZoomVisible ? "opacity-100" : "opacity-0",
+          )}
+          style={{ background: "rgba(0,0,0,0.82)" }}
+          onPointerDown={(e) => {
+            // Empêche le scroll/drag de passer au contenu derrière.
+            e.preventDefault();
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Fermer"
+            className="absolute right-16 top-16 z-[1101] grid h-40 w-40 place-items-center"
+            onClick={() => setCoverZoomOpen(false)}
+          >
+            <Image
+              src={closeIcon}
+              alt="fermer"
+              width={16}
+              height={16}
+              className="brightness-0 invert"
+            />
+          </button>
+
+          <div className="absolute inset-0 flex items-center justify-center px-16">
+            <div className="relative overflow-hidden rounded-[2px]">
+              <div
+                className="relative overflow-hidden will-change-transform"
+                style={{
+                  aspectRatio: "3 / 4",
+                  height: "var(--vvh, 100vh)",
+                  width: "calc(var(--vvh, 100vh) * 0.75)",
+                  transform: coverZoomVisible ? "scale(1.06)" : "scale(1.0)",
+                  transition: "transform 500ms cubic-bezier(.22,1,.36,1)",
+                }}
+              >
+                <Image
+                  src={coverImg}
+                  alt={coverTitle}
+                  fill
+                  className="object-cover"
+                  sizes="100vw"
+                  priority
+                  quality={100}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stepper */}
       <div
