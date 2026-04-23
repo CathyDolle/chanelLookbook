@@ -46,6 +46,9 @@ export function Lookbook() {
   const [activeLookIdx, setActiveLookIdx] = useState(0);
   const [fullUiVisible, setFullUiVisible] = useState(false);
   const [coverZoomGlobalOpen, setCoverZoomGlobalOpen] = useState(false);
+  const coverZoomGlobalOpenRef = useRef(false);
+  const [activeCarouselSlideIdx, setActiveCarouselSlideIdx] = useState(0);
+  const activeCarouselSlideIdxRef = useRef(0);
   const scrollRaf = useRef<number | null>(null);
   const scrollYAtOpenRef = useRef<number>(0);
   const [coverReadyIdx, setCoverReadyIdx] = useState<number | null>(null);
@@ -173,6 +176,14 @@ export function Lookbook() {
   }, [focus.open]);
 
   useEffect(() => {
+    coverZoomGlobalOpenRef.current = coverZoomGlobalOpen;
+  }, [coverZoomGlobalOpen]);
+
+  useEffect(() => {
+    activeCarouselSlideIdxRef.current = activeCarouselSlideIdx;
+  }, [activeCarouselSlideIdx]);
+
+  useEffect(() => {
     // Bloque le zoom navigateur (Ctrl/Cmd +/-/0 et Ctrl/Cmd+wheel/pinch trackpad)
     // pour réutiliser ces gestes pour la resize des cartes.
     const onKeyDown = (e: KeyboardEvent) => {
@@ -193,13 +204,34 @@ export function Lookbook() {
     const onWheel = (e: WheelEvent) => {
       // Sur mac trackpad: pinch => wheel avec ctrlKey=true.
       if (!(e.ctrlKey || e.metaKey)) return;
-      // En vue full, pas de zoom/dezoom du "canvas" via pinch trackpad.
-      if (focusOpenRef.current) return;
       e.preventDefault();
 
       const now = Date.now();
       if (now - lastDesktopGestureAt.current < 140) return;
       lastDesktopGestureAt.current = now;
+
+      // En vue full: pinch = zoom cover (slide 0) open/close.
+      if (focusOpenRef.current) {
+        const isOnCover = activeCarouselSlideIdxRef.current === 0;
+        if (!isOnCover) return;
+
+        if (!coverZoomGlobalOpenRef.current && e.deltaY < 0) {
+          setCoverZoomGlobalOpen(true);
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new Event("lookbook:coverZoomOpen"));
+          }
+          return;
+        }
+
+        if (coverZoomGlobalOpenRef.current && e.deltaY > 0) {
+          setCoverZoomGlobalOpen(false);
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new Event("lookbook:coverZoomClose"));
+          }
+          return;
+        }
+        return;
+      }
 
       const focusPoint = { clientX: e.clientX, clientY: e.clientY };
       if (e.deltaY < 0) zoomInAll(focusPoint);
@@ -752,6 +784,9 @@ export function Lookbook() {
                     onCoverZoomChange={(open) => {
                       setCoverZoomGlobalOpen(open);
                     }}
+                    onSlideIdxChange={(i) => {
+                      setActiveCarouselSlideIdx(i);
+                    }}
                     onCoverReady={() => {
                       if (idx === focus.idx) setCoverReadyIdx(idx);
                     }}
@@ -903,6 +938,7 @@ function LookHorizontalCarousel({
   active,
   uiVisible,
   onCoverZoomChange,
+  onSlideIdxChange,
   onCoverReady,
 }: {
   lookKey: LookbookImageKey;
@@ -912,6 +948,7 @@ function LookHorizontalCarousel({
   active?: boolean;
   uiVisible?: boolean;
   onCoverZoomChange?: (open: boolean) => void;
+  onSlideIdxChange?: (idx: number) => void;
   onCoverReady?: () => void;
 }) {
   const localRef = useRef<HTMLDivElement | null>(null);
@@ -921,6 +958,16 @@ function LookHorizontalCarousel({
   const [coverZoomVisible, setCoverZoomVisible] = useState(false);
   const tapStart = useRef<{ x: number; y: number; t: number } | null>(null);
   const tapMoved = useRef(false);
+  const coverPinch = useRef<{ startDist: number; opened: boolean } | null>(null);
+
+  const getDist = (
+    t1: { clientX: number; clientY: number },
+    t2: { clientX: number; clientY: number },
+  ) => {
+    const dx = t1.clientX - t2.clientX;
+    const dy = t1.clientY - t2.clientY;
+    return Math.hypot(dx, dy);
+  };
   const media = useMemo<LookContentItem[]>(() => {
     if (lookKey !== "001") return content;
     const i = content.findIndex((x) => x.type === "video");
@@ -943,6 +990,7 @@ function LookHorizontalCarousel({
     setCoverZoomOpen(false);
     setCoverZoomVisible(false);
     onCoverZoomChange?.(false);
+    onSlideIdxChange?.(0);
   }, [active]);
 
   useEffect(() => {
@@ -962,6 +1010,15 @@ function LookHorizontalCarousel({
     };
     window.addEventListener("lookbook:coverZoomClose", onClose);
     return () => window.removeEventListener("lookbook:coverZoomClose", onClose);
+  }, [onCoverZoomChange]);
+
+  useEffect(() => {
+    const onOpen = () => {
+      setCoverZoomOpen(true);
+      onCoverZoomChange?.(true);
+    };
+    window.addEventListener("lookbook:coverZoomOpen", onOpen);
+    return () => window.removeEventListener("lookbook:coverZoomOpen", onOpen);
   }, [onCoverZoomChange]);
 
   useEffect(() => {
@@ -990,6 +1047,7 @@ function LookHorizontalCarousel({
               Math.min(slideCount - 1, Math.round(el.scrollLeft / w)),
             );
             setSlideIdx(next);
+            onSlideIdxChange?.(next);
           });
         }}
       >
@@ -1029,6 +1087,13 @@ function LookHorizontalCarousel({
                 onCoverZoomChange?.(true);
               }}
               onTouchStart={(e) => {
+                if (e.touches.length === 2) {
+                  coverPinch.current = {
+                    startDist: getDist(e.touches[0], e.touches[1]),
+                    opened: false,
+                  };
+                  return;
+                }
                 if (e.touches.length !== 1) return;
                 tapMoved.current = false;
                 tapStart.current = {
@@ -1038,6 +1103,28 @@ function LookHorizontalCarousel({
                 };
               }}
               onTouchMove={(e) => {
+                // Pinch zoom-in => ouvre le zoom cover
+                if (e.touches.length === 2 && coverPinch.current) {
+                  const st = coverPinch.current;
+                  if (!st.startDist) return;
+                  const dist = getDist(e.touches[0], e.touches[1]);
+                  const ratio = dist / st.startDist;
+                  // seuil volontairement un peu “ferme” pour ne pas déclencher sur un swipe
+                  if (ratio > 1.08) {
+                    st.opened = true;
+                    e.preventDefault();
+                    setCoverZoomOpen(true);
+                    onCoverZoomChange?.(true);
+                  }
+                  // pinch inverse => ferme
+                  if (coverZoomOpen && ratio < 0.92) {
+                    e.preventDefault();
+                    setCoverZoomOpen(false);
+                    onCoverZoomChange?.(false);
+                    coverPinch.current = null;
+                  }
+                  return;
+                }
                 const start = tapStart.current;
                 if (!start) return;
                 if (e.touches.length !== 1) return;
@@ -1046,6 +1133,7 @@ function LookHorizontalCarousel({
                 if (dx > 10 || dy > 10) tapMoved.current = true;
               }}
               onTouchEnd={() => {
+                coverPinch.current = null;
                 const start = tapStart.current;
                 tapStart.current = null;
                 if (!start) return;
@@ -1053,6 +1141,10 @@ function LookHorizontalCarousel({
                 if (tapMoved.current || dt > 350) return;
                 setCoverZoomOpen(true);
                 onCoverZoomChange?.(true);
+              }}
+              onTouchCancel={() => {
+                coverPinch.current = null;
+                tapStart.current = null;
               }}
             >
               <Image
