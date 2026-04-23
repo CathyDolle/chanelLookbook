@@ -61,7 +61,12 @@ export function Lookbook() {
     height: number;
     // Snapshot des placements en mode grille (avant passage en full).
     // Sert de cible fiable pour l'anim de fermeture, même après navigation verticale en full.
-    cardRects: Array<{ left: number; top: number; width: number; height: number } | null>;
+    cardRects: Array<{
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+    } | null>;
   } | null>(null);
   const lastDesktopGestureAt = useRef<number>(0);
   const focusOpenRef = useRef(false);
@@ -182,7 +187,9 @@ export function Lookbook() {
         img.src = src;
       }
     };
-    const ric = (window as any).requestIdleCallback as undefined | ((cb: () => void) => number);
+    const ric = (window as any).requestIdleCallback as
+      | undefined
+      | ((cb: () => void) => number);
     if (ric) ric(preload);
     else setTimeout(preload, 250);
   }, []);
@@ -226,8 +233,10 @@ export function Lookbook() {
     const gridEl = gridRef.current;
     if (!gridEl) return;
     const isAnimatingFocus = focus.open && focusPhase !== "open";
-    const isAnimatingCover = !!coverTransition && coverTransition.phase !== "final";
-    const lockInteractions = coverZoomGlobalOpen || isAnimatingFocus || isAnimatingCover;
+    const isAnimatingCover =
+      !!coverTransition && coverTransition.phase !== "final";
+    const lockInteractions =
+      coverZoomGlobalOpen || isAnimatingFocus || isAnimatingCover;
 
     if (lockInteractions) {
       // Quand la cover est zoomée: aucune interaction/scroll sur le feed.
@@ -652,7 +661,12 @@ export function Lookbook() {
       lookKey,
       title,
       from: { left: 0, top: 0, width: vw, height: vh },
-      to: { left: cardR.left, top: cardR.top, width: cardR.width, height: cardR.height },
+      to: {
+        left: cardR.left,
+        top: cardR.top,
+        width: cardR.width,
+        height: cardR.height,
+      },
       phase: "from",
     });
   };
@@ -686,7 +700,10 @@ export function Lookbook() {
     if (scrollRaf.current) cancelAnimationFrame(scrollRaf.current);
     scrollRaf.current = requestAnimationFrame(() => {
       const vh = window.innerHeight || 1;
-      const idx = Math.max(0, Math.min(lookbook.length - 1, Math.round(el.scrollTop / vh)));
+      const idx = Math.max(
+        0,
+        Math.min(lookbook.length - 1, Math.round(el.scrollTop / vh)),
+      );
       setActiveLookIdx((prev) => (prev === idx ? prev : idx));
     });
   };
@@ -1020,28 +1037,30 @@ export function Lookbook() {
         focus.phase === "open" &&
         !topNavHidden &&
         !coverZoomGlobalOpen && (
-        <>
-          <LookTopNav
-            onBack={closeFocusToGrid}
-            onToggleFav={() => {
-              // placeholder: favoris à venir
-            }}
-          />
+          <>
+            <LookTopNav
+              onBack={closeFocusToGrid}
+              onToggleFav={() => {
+                // placeholder: favoris à venir
+              }}
+            />
 
-          {/* Titre séparé, au-dessus du stepper */}
-          <div
-            className={clsx(
-              "pointer-events-none fixed left-0 right-0 bottom-[120px] z-[1002] flex justify-center",
-              "transition-[opacity,transform] duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
-              fullUiVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3",
-            )}
-          >
-            <div className="text-[11px] font-serif tracking-wide text-white">
-              {formatLookTitle(activeLookIdx)}
+            {/* Titre séparé, au-dessus du stepper */}
+            <div
+              className={clsx(
+                "pointer-events-none fixed left-0 right-0 bottom-[120px] z-[1002] flex justify-center",
+                "transition-[opacity,transform] duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
+                fullUiVisible
+                  ? "opacity-100 translate-y-0"
+                  : "opacity-0 translate-y-3",
+              )}
+            >
+              <div className="text-[11px] font-serif tracking-wide text-white">
+                {formatLookTitle(activeLookIdx)}
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          </>
+        )}
 
       {/* Zoom cover: croix globale + blocage total des interactions */}
       {focus.open && focus.phase === "open" && coverZoomGlobalOpen && (
