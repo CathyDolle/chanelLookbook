@@ -2,6 +2,7 @@
 const fontFamily = {
 	sans: ['var(--font-inter)', 'sans-serif'],
 	serif: ['var(--font-chanel)', 'serif'],
+	abchanel: ['var(--font-abchanel)', 'sans-serif'],
 }
 
 /** Config variables */

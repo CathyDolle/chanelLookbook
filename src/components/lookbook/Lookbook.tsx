@@ -1229,7 +1229,7 @@ function DetailsSlide({
     <section className="relative flex h-full w-[100vw] items-center justify-center bg-black px-26 text-center text-white [scroll-snap-align:start]">
       <div>
         <div className="text-14 font-serif tracking-wide">{title}</div>
-        <div className="mt-13 max-w-[42ch] text-12 leading-[125%]">
+        <div className="mt-13 span-w-10 text-12 leading-[125%] font-abchanel">
           Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt
           ut labore et dolore magna aliqua.
         </div>

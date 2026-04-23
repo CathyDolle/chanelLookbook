@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { chanel } from "@/fonts/Chanel";
+import { abChanel, chanel } from "@/fonts/Chanel";
 import "@/style/globals.scss";
 import { Lenis } from "@/components";
 import clsx from "clsx";
@@ -30,6 +30,7 @@ export default function RootLayout({
           inter.className,
           inter.variable,
           chanel.variable,
+          abChanel.variable,
         )}
       >
         <Header />
