@@ -5,34 +5,20 @@ import arrow from "@/assets/svgs/arrow.svg";
 import star from "@/assets/svgs/star.svg";
 
 export function LookTopNav({
-  title,
   onBack,
   onToggleFav,
   className,
 }: {
-  title: string;
   onBack: () => void;
   onToggleFav?: () => void;
   className?: string;
 }) {
-  const [currentTitle, setCurrentTitle] = useState(title);
-  const [incomingTitle, setIncomingTitle] = useState<string | null>(null);
-  const [isFadingTitle, setIsFadingTitle] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setIsMounted(true));
     return () => cancelAnimationFrame(id);
   }, []);
-
-  useEffect(() => {
-    if (title === currentTitle) return;
-    // Si ça change en boucle pendant le scroll, on garde juste la dernière valeur.
-    setIncomingTitle(title);
-    // Déclenche le fade après que le DOM ait rendu le nouveau texte.
-    const id = requestAnimationFrame(() => setIsFadingTitle(true));
-    return () => cancelAnimationFrame(id);
-  }, [title, currentTitle]);
 
   const appear = useMemo(
     () =>
@@ -77,42 +63,7 @@ export function LookTopNav({
           />
         </button>
 
-        <div className={clsx("flex-1 px-10 text-center", appear, "delay-[40ms]")}>
-          <div className="relative mx-auto h-[18px] overflow-hidden">
-            <div className="relative h-[18px]">
-              <div
-                className={clsx(
-                  "absolute inset-0 truncate text-14 font-serif tracking-wide leading-[18px] will-change-[opacity]",
-                  "transition-opacity duration-250 ease-[cubic-bezier(.22,1,.36,1)]",
-                )}
-                style={{
-                  opacity: isFadingTitle ? 0 : 1,
-                }}
-              >
-                {currentTitle}
-              </div>
-
-              <div
-                className={clsx(
-                  "absolute inset-0 truncate text-14 font-serif tracking-wide leading-[18px] will-change-[opacity]",
-                  "transition-opacity duration-250 ease-[cubic-bezier(.22,1,.36,1)]",
-                )}
-                style={{
-                  opacity: isFadingTitle ? 1 : 0,
-                }}
-                onTransitionEnd={(e) => {
-                  if (e.propertyName !== "opacity") return;
-                  if (!incomingTitle) return;
-                  setCurrentTitle(incomingTitle);
-                  setIncomingTitle(null);
-                  setIsFadingTitle(false);
-                }}
-              >
-                {incomingTitle ?? currentTitle}
-              </div>
-            </div>
-          </div>
-        </div>
+        <div aria-hidden className="w-32" />
 
         <button
           type="button"

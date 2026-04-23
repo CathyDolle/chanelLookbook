@@ -796,13 +796,21 @@ export function Lookbook() {
       )}
 
       {focus.open && focus.phase === "open" && !topNavHidden && (
-        <LookTopNav
-          title={formatLookTitle(activeLookIdx)}
-          onBack={closeFocusToGrid}
-          onToggleFav={() => {
-            // placeholder: favoris à venir
-          }}
-        />
+        <>
+          <LookTopNav
+            onBack={closeFocusToGrid}
+            onToggleFav={() => {
+              // placeholder: favoris à venir
+            }}
+          />
+
+          {/* Titre séparé, au-dessus du stepper */}
+          <div className="pointer-events-none fixed left-0 right-0 bottom-[120px] z-[1002] flex justify-center">
+            <div className="text-[11px] font-serif tracking-wide text-white">
+              {formatLookTitle(activeLookIdx)}
+            </div>
+          </div>
+        </>
       )}
     </section>
   );
