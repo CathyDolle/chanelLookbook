@@ -9,7 +9,7 @@ import { LookHorizontalCarousel } from "./LookHorizontalCarousel";
 import clsx from "clsx";
 import Image from "next/image";
 import closeIcon from "@/assets/svgs/close.svg";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
   clamp,
@@ -17,6 +17,7 @@ import {
   FOCUS_ZOOM_EASE,
   FOCUS_ZOOM_MS,
   GUTTER_STEPS,
+  getTouchDist,
   isReducedMotion,
   PINCH_COOLDOWN_MS,
   PINCH_IN_THRESHOLD,
@@ -26,9 +27,6 @@ import {
 import type { CoverTransitionState, FocusState } from "./lookbookTypes";
 
 export function Lookbook() {
-  const spanSteps = useMemo(() => SPAN_STEPS, []);
-  const gutterSteps = useMemo(() => GUTTER_STEPS, []);
-
   // Vue par défaut: 2 items par ligne (équivalent "w/2")
   const [stepIdx, setStepIdx] = useState<number>(2);
   const stepIdxRef = useRef<number>(2);
@@ -101,7 +99,7 @@ export function Lookbook() {
   };
 
   const clampStep = (idx: number) =>
-    Math.max(0, Math.min(spanSteps.length - 1, idx));
+    Math.max(0, Math.min(SPAN_STEPS.length - 1, idx));
 
   const findCardIndexAtPoint = (clientX: number, clientY: number) => {
     if (typeof document === "undefined") return null;
@@ -206,8 +204,7 @@ export function Lookbook() {
     coverZoomGlobalOpenRef.current = coverZoomGlobalOpen;
   }, [coverZoomGlobalOpen]);
 
-  const closeFocusToGridNow = () => {
-    if (!focusOpenRef.current) return;
+  const beginCloseFocusToGrid = (idx: number) => {
     // Cache la top-nav immédiatement au clic (avant l'anim)
     setTopNavHidden(true);
     setCoverZoomGlobalOpen(false);
@@ -219,13 +216,14 @@ export function Lookbook() {
       gridEl.style.opacity = "1";
       gridEl.style.pointerEvents = "none";
     }
-    startExitCoverTransition(activeLookIdxRef.current);
+    startExitCoverTransition(idx);
     // Ferme depuis le look actuellement visible dans le feed
-    setFocus((prev) =>
-      prev.open
-        ? { ...prev, idx: activeLookIdxRef.current, phase: "exiting" }
-        : prev,
-    );
+    setFocus((prev) => (prev.open ? { ...prev, idx, phase: "exiting" } : prev));
+  };
+
+  const closeFocusToGridNow = () => {
+    if (!focusOpenRef.current) return;
+    beginCloseFocusToGrid(activeLookIdxRef.current);
   };
 
   /* eslint-disable react-hooks/exhaustive-deps */
@@ -673,20 +671,7 @@ export function Lookbook() {
 
   const closeFocusToGrid = () => {
     if (!focus.open) return;
-    // Cache la top-nav immédiatement au clic (avant l'anim)
-    setTopNavHidden(true);
-    setCoverZoomGlobalOpen(false);
-    resetPinchState();
-    const gridEl = gridRef.current;
-    if (gridEl) {
-      gridEl.style.opacity = "1";
-      gridEl.style.pointerEvents = "none";
-    }
-    startExitCoverTransition(activeLookIdx);
-    // Ferme depuis le look actuellement visible dans le feed
-    setFocus((prev) =>
-      prev.open ? { ...prev, idx: activeLookIdx, phase: "exiting" } : prev,
-    );
+    beginCloseFocusToGrid(activeLookIdx);
   };
 
   const formatLookTitle = (idx: number) => {
@@ -731,7 +716,7 @@ export function Lookbook() {
 
   useEffect(() => {
     // Rend la gouttière globale (toute la page), pas juste le composant.
-    const key = gutterSteps[stepIdx] ?? "m";
+    const key = GUTTER_STEPS[stepIdx] ?? "m";
     const root = document.documentElement;
     root.classList.remove(
       "gutter-gap-xs",
@@ -750,7 +735,7 @@ export function Lookbook() {
       );
       root.classList.add("gutter-gap-m");
     };
-  }, [stepIdx, gutterSteps]);
+  }, [stepIdx]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -764,15 +749,6 @@ export function Lookbook() {
     window.addEventListener("resize", setVvh);
     return () => window.removeEventListener("resize", setVvh);
   }, []);
-
-  const getTouchDist = (
-    t1: { clientX: number; clientY: number },
-    t2: { clientX: number; clientY: number },
-  ) => {
-    const dx = t1.clientX - t2.clientX;
-    const dy = t1.clientY - t2.clientY;
-    return Math.hypot(dx, dy);
-  };
 
   const itemsPerRow =
     stepIdx === 0 ? 4 : stepIdx === 1 ? 3 : stepIdx === 2 ? 2 : 1;

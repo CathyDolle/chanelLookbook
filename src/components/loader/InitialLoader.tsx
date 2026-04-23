@@ -29,6 +29,7 @@ export default function InitialLoader() {
 
   const startedAtRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
+  const timeoutsRef = useRef<number[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,15 +67,18 @@ export default function InitialLoader() {
 
       setProgress(1);
       setExiting(true);
-      window.setTimeout(() => {
+      const t = window.setTimeout(() => {
         if (!cancelled) setVisible(false);
       }, 280);
+      timeoutsRef.current.push(t);
     })();
 
     return () => {
       cancelled = true;
       document.documentElement.style.overflow = previousOverflow;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      for (const id of timeoutsRef.current) window.clearTimeout(id);
+      timeoutsRef.current = [];
     };
   }, [assets]);
 

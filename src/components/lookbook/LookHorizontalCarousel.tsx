@@ -230,14 +230,7 @@ export function LookHorizontalCarousel({
                 onLoadingComplete={onCoverReady}
               />
             </div>
-            <div
-              aria-hidden
-              className={clsx(
-                "pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent",
-                "transition-opacity duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
-                uiVisible && !coverZoomOpen ? "opacity-100" : "opacity-0",
-              )}
-            />
+            <BottomGradient visible={!!uiVisible && !coverZoomOpen} />
           </div>
 
           {/* Slides suivants: media + details */}
@@ -340,14 +333,7 @@ function MediaSlide({
           loop
         />
       )}
-      <div
-        aria-hidden
-        className={clsx(
-          "pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent",
-          "transition-opacity duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
-          uiVisible ? "opacity-100" : "opacity-0",
-        )}
-      />
+      <BottomGradient visible={!!uiVisible} />
     </div>
   );
 }
@@ -371,15 +357,21 @@ function DetailsSlide({
           ut labore et dolore magna aliqua.
         </div>
       </div>
-      <div
-        aria-hidden
-        className={clsx(
-          "pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent",
-          "transition-opacity duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
-          uiVisible ? "opacity-100" : "opacity-0",
-        )}
-      />
+      <BottomGradient visible={!!uiVisible} />
     </section>
+  );
+}
+
+function BottomGradient({ visible }: { visible: boolean }) {
+  return (
+    <div
+      aria-hidden
+      className={clsx(
+        "pointer-events-none absolute inset-x-0 bottom-0 h-[30vh] bg-gradient-to-t from-black/90 to-transparent",
+        "transition-opacity duration-500 ease-[cubic-bezier(.22,1,.36,1)]",
+        visible ? "opacity-100" : "opacity-0",
+      )}
+    />
   );
 }
 
